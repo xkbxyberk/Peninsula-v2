@@ -48,7 +48,7 @@ final class HoverTrackingService {
         let geometry = notchGeometryProvider()
         
         let hitTestFrame = geometry.frame.expanded(by: NSEdgeInsets(
-            top: 0,
+            top: 20,
             left: hitTestPadding,
             bottom: hitTestPadding,
             right: hitTestPadding
