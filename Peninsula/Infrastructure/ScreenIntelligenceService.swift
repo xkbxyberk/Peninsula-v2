@@ -15,7 +15,7 @@ final class ScreenIntelligenceService: Sendable {
         }
         
         let notchWidth = Notch.Closed.width
-        let notchHeight = Notch.Closed.height
+        let notchHeight = safeArea.top
         
         let cornerRadius = Notch.CornerRadius.min
         
@@ -24,7 +24,8 @@ final class ScreenIntelligenceService: Sendable {
             height: notchHeight,
             centerX: frame.midX,
             cornerRadius: cornerRadius,
-            screenFrame: frame
+            screenFrame: frame,
+            menuBarHeight: safeArea.top
         )
     }
     
@@ -40,3 +41,4 @@ final class ScreenIntelligenceService: Sendable {
         calculateNotchGeometry(for: currentScreen())
     }
 }
+

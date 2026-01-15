@@ -12,9 +12,51 @@ final class NotchViewModel {
     private let screenService: ScreenIntelligenceService
     private var hoverService: HoverTrackingService?
     private var cancellables = Set<AnyCancellable>()
+    private var isHovering: Bool = false
+    
+    var isMusicActive: Bool {
+        musicService.activeApp != nil
+    }
     
     var expansionProgress: CGFloat {
-        state.isExpanded ? 1.0 : 0.0
+        switch state {
+        case .closed:
+            return 0.0
+        case .playing:
+            return 0.0
+        case .expanded:
+            return 1.0
+        }
+    }
+    
+    var baseWidth: CGFloat {
+        isMusicActive ? Notch.Playing.width : Notch.Closed.width
+    }
+    
+    var currentWidth: CGFloat {
+        switch state {
+        case .closed:
+            return Notch.Closed.width
+        case .playing:
+            return Notch.Playing.width
+        case .expanded:
+            return Notch.Expanded.width
+        }
+    }
+    
+    var baseHeight: CGFloat {
+        currentGeometry.menuBarHeight > 0 ? currentGeometry.menuBarHeight : Notch.Closed.height
+    }
+    
+    var currentHeight: CGFloat {
+        switch state {
+        case .closed:
+            return baseHeight
+        case .playing:
+            return baseHeight
+        case .expanded:
+            return Notch.Expanded.height
+        }
     }
     
     init(screenService: ScreenIntelligenceService = .shared) {
@@ -25,7 +67,14 @@ final class NotchViewModel {
     
     func updateGeometry() {
         currentGeometry = screenService.notchGeometryForCurrentScreen()
-        displayGeometry = currentGeometry
+        updateDisplayGeometry()
+    }
+    
+    private func updateDisplayGeometry() {
+        displayGeometry = currentGeometry.expanded(to: CGSize(
+            width: currentWidth,
+            height: currentHeight
+        ))
     }
     
     private func setupHoverTracking() {
@@ -41,19 +90,30 @@ final class NotchViewModel {
             .store(in: &cancellables)
     }
     
-    private func handleHoverChange(_ isHovering: Bool) {
-        let newState: NotchState = isHovering ? .expanded : .closed
-        guard newState != state else { return }
+    private func handleHoverChange(_ hovering: Bool) {
+        isHovering = hovering
+        updateState()
+    }
+    
+    private func updateState() {
+        let newState: NotchState
         
-        state = newState
-        
-        if state.isExpanded {
-            displayGeometry = currentGeometry.expanded(to: CGSize(
-                width: Notch.Expanded.width,
-                height: Notch.Expanded.height
-            ))
+        if isHovering {
+            newState = .expanded
+        } else if musicService.activeApp != nil {
+            newState = .playing
         } else {
-            displayGeometry = currentGeometry
+            newState = .closed
+        }
+        
+        guard newState != state else { return }
+        state = newState
+        updateDisplayGeometry()
+    }
+    
+    func refreshMusicState() {
+        if !isHovering {
+            updateState()
         }
     }
     
@@ -66,10 +126,13 @@ final class NotchViewModel {
     }
     
     func expand() {
-        handleHoverChange(true)
+        isHovering = true
+        updateState()
     }
     
     func collapse() {
-        handleHoverChange(false)
+        isHovering = false
+        updateState()
     }
 }
+

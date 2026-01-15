@@ -10,6 +10,11 @@ enum Notch {
         static let height: CGFloat = 34
     }
     
+    enum Playing {
+        static let width: CGFloat = 320
+        static let height: CGFloat = 34
+    }
+    
     enum Expanded {
         static let width: CGFloat = 530
         static let height: CGFloat = 260

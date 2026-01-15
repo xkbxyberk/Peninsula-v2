@@ -7,6 +7,7 @@ struct NotchGeometry: Equatable, Sendable {
     let centerX: CGFloat
     let cornerRadius: CGFloat
     let screenFrame: CGRect
+    let menuBarHeight: CGFloat
     
     var origin: CGPoint {
         CGPoint(
@@ -41,7 +42,8 @@ struct NotchGeometry: Equatable, Sendable {
             height: size.height,
             centerX: centerX,
             cornerRadius: Notch.CornerRadius.max,
-            screenFrame: screenFrame
+            screenFrame: screenFrame,
+            menuBarHeight: menuBarHeight
         )
     }
     
@@ -50,6 +52,8 @@ struct NotchGeometry: Equatable, Sendable {
         height: 0,
         centerX: 0,
         cornerRadius: 0,
-        screenFrame: .zero
+        screenFrame: .zero,
+        menuBarHeight: 0
     )
 }
+

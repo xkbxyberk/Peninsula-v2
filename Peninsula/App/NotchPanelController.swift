@@ -69,7 +69,7 @@ final class NotchPanelController {
     
     private func updateMouseEventHandling() {
         guard let panel = panel else { return }
-        panel.ignoresMouseEvents = !viewModel.state.isExpanded
+        panel.ignoresMouseEvents = viewModel.state.isClosed
     }
     
     private func calculatePanelFrame(for geometry: NotchGeometry) -> NSRect {

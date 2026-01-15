@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct NotchPanelView: View {
     @Bindable var viewModel: NotchViewModel
@@ -13,13 +14,30 @@ struct NotchPanelView: View {
         )
     }
     
+    private var accentColor: Color {
+        Color(nsColor: viewModel.musicService.accentColor)
+    }
+    
+    private var progressValue: CGFloat {
+        guard viewModel.musicService.duration > 0 else { return 0 }
+        return viewModel.musicService.currentPosition / viewModel.musicService.duration
+    }
+    
+    private var closedWidth: CGFloat {
+        viewModel.baseWidth
+    }
+    
+    private var closedHeight: CGFloat {
+        viewModel.baseHeight
+    }
+    
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .top) {
                 NotchShape(
                     progress: viewModel.expansionProgress,
-                    closedWidth: Notch.Closed.width,
-                    closedHeight: Notch.Closed.height,
+                    closedWidth: closedWidth,
+                    closedHeight: closedHeight,
                     openWidth: Notch.Expanded.width,
                     openHeight: Notch.Expanded.height
                 )
@@ -37,20 +55,101 @@ struct NotchPanelView: View {
                     y: 3 * viewModel.expansionProgress
                 )
                 
-                expandedContent
-                    .opacity(viewModel.expansionProgress)
+                if viewModel.isMusicActive && !viewModel.state.isExpanded {
+                    ProgressRingShape(
+                        width: closedWidth,
+                        height: closedHeight
+                    )
+                    .trim(from: 0, to: progressValue)
+                    .stroke(
+                        accentColor,
+                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                    )
+                    .shadow(color: accentColor.opacity(0.5), radius: 4)
+                    .animation(.linear(duration: 1.0), value: progressValue)
+                }
+                
+                if viewModel.state.isPlaying {
+                    miniPlayerContent
+                        .opacity(1.0 - viewModel.expansionProgress)
+                }
+                
+                if viewModel.state.isExpanded {
+                    expandedContent
+                        .opacity(viewModel.expansionProgress)
+                }
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
         .animation(animationTiming, value: viewModel.state)
+        .onChange(of: viewModel.musicService.activeApp) { _, _ in
+            viewModel.refreshMusicState()
+        }
+    }
+    
+    @ViewBuilder
+    private var miniPlayerContent: some View {
+        HStack(alignment: .center, spacing: 0) {
+            if let artwork = viewModel.musicService.artwork {
+                Image(nsImage: artwork)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 24, height: 24)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                    .padding(.leading, 28)
+            } else {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(.white.opacity(0.1))
+                    .frame(width: 24, height: 24)
+                    .overlay {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.3))
+                    }
+                    .padding(.leading, 28)
+            }
+            
+            Spacer()
+            
+            if viewModel.musicService.isPlaying {
+                MiniEqualizerView(accentColor: accentColor)
+                    .padding(.trailing, 28)
+            }
+        }
+        .frame(width: Notch.Playing.width, height: closedHeight, alignment: .center)
     }
     
     @ViewBuilder
     private var expandedContent: some View {
-        if viewModel.state.isExpanded {
-            MusicPanelView(musicService: viewModel.musicService)
-                .padding(.top, 50)
+        MusicPanelView(musicService: viewModel.musicService)
+            .padding(.top, 50)
+    }
+}
+
+struct MiniEqualizerView: View {
+    let accentColor: Color
+    
+    @State private var heights: [CGFloat] = [0.4, 0.6, 0.5, 0.7]
+    
+    private let timer = Timer.publish(every: 0.15, on: .main, in: .common).autoconnect()
+    
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(0..<4, id: \.self) { index in
+                Capsule()
+                    .fill(accentColor)
+                    .frame(width: 3, height: 4 + heights[index] * 12)
+            }
+        }
+        .frame(height: 16)
+        .onReceive(timer) { _ in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                heights = heights.map { _ in CGFloat.random(in: 0.2...1.0) }
+            }
         }
     }
 }
+
+
+
 
