@@ -7,6 +7,8 @@ final class NotchViewModel {
     private(set) var currentGeometry: NotchGeometry = .zero
     private(set) var displayGeometry: NotchGeometry = .zero
     
+    let musicService = MusicService()
+    
     private let screenService: ScreenIntelligenceService
     private var hoverService: HoverTrackingService?
     private var cancellables = Set<AnyCancellable>()
@@ -28,7 +30,7 @@ final class NotchViewModel {
     
     private func setupHoverTracking() {
         hoverService = HoverTrackingService { [weak self] in
-            self?.currentGeometry ?? .zero
+            self?.displayGeometry ?? .zero
         }
         
         hoverService?.isHovering

@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var viewModel: NotchViewModel?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        PermissionManager.shared.requestPermissionsOnLaunch()
         setupNotchPanel()
     }
     
