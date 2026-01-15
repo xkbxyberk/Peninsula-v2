@@ -6,7 +6,7 @@ enum Notch {
     static let animationTimingFunction = (c1: 0.16, c2: 1.0, c3: 0.3, c4: 1.0)
     
     enum Closed {
-        static let width: CGFloat = 204
+        static let width: CGFloat = 235
         static let height: CGFloat = 34
     }
     
