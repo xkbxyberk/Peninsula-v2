@@ -16,6 +16,7 @@ struct NotchPanelView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .top) {
+                // Main notch shape with native shadow
                 NotchShape(
                     progress: viewModel.expansionProgress,
                     closedWidth: Notch.Closed.width,
@@ -24,6 +25,20 @@ struct NotchPanelView: View {
                     openHeight: Notch.Expanded.height
                 )
                 .fill(.black)
+                // Thin subtle glow around the notch shape
+                .shadow(
+                    color: .black.opacity(0.25 * viewModel.expansionProgress),
+                    radius: 6 * viewModel.expansionProgress,
+                    x: 0,
+                    y: 2 * viewModel.expansionProgress
+                )
+                // Slightly larger soft glow
+                .shadow(
+                    color: .black.opacity(0.1 * viewModel.expansionProgress),
+                    radius: 12 * viewModel.expansionProgress,
+                    x: 0,
+                    y: 3 * viewModel.expansionProgress
+                )
                 
                 expandedContent
                     .opacity(viewModel.expansionProgress)

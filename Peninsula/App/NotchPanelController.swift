@@ -73,8 +73,11 @@ final class NotchPanelController {
     }
     
     private func calculatePanelFrame(for geometry: NotchGeometry) -> NSRect {
-        let width = Notch.Expanded.width
-        let height = Notch.Expanded.height
+        // Small padding for subtle shadow glow
+        let shadowPadding: CGFloat = 25
+        
+        let width = Notch.Expanded.width + (shadowPadding * 2)
+        let height = Notch.Expanded.height + shadowPadding
         
         let x = geometry.centerX - width / 2
         let y = geometry.screenFrame.maxY - height
