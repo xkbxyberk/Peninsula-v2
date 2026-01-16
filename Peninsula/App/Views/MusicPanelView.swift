@@ -121,12 +121,16 @@ struct MusicPanelView: View {
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
-                            isSeeking = true
+                            if !isSeeking {
+                                isSeeking = true
+                                musicService.isSeeking = true
+                            }
                             let progress = max(0, min(1, value.location.x / geometry.size.width))
                             seekPosition = progress * musicService.duration
                         }
                         .onEnded { _ in
                             musicService.seek(to: seekPosition)
+                            musicService.isSeeking = false
                             isSeeking = false
                         }
                 )

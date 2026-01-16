@@ -25,6 +25,7 @@ final class MusicService {
     var currentPosition: Double = 0
     var duration: Double = 0
     var shuffleEnabled: Bool = false
+    var isSeeking: Bool = false
     
     private var artworkCache: [String: NSImage] = [:]
     private var lastTrackName: String = ""
@@ -194,7 +195,7 @@ final class MusicService {
     }
     
     private func updatePositionOnly() {
-        guard let app = activeApp else { return }
+        guard let app = activeApp, !isSeeking else { return }
         
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
@@ -315,12 +316,17 @@ final class MusicService {
     
     func seek(to position: Double) {
         guard let app = activeApp else { return }
+        
+        currentPosition = position
+        
         let posInt = Int(position)
-        switch app {
-        case .appleMusic:
-            executeAppleScript("tell application \"Music\" to set player position to \(posInt)")
-        case .spotify:
-            executeAppleScript("tell application \"Spotify\" to set player position to \(posInt)")
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            switch app {
+            case .appleMusic:
+                self?.executeAppleScript("tell application \"Music\" to set player position to \(posInt)")
+            case .spotify:
+                self?.executeAppleScript("tell application \"Spotify\" to set player position to \(posInt)")
+            }
         }
     }
     

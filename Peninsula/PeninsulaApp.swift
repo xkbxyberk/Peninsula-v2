@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         
         let controller = NotchPanelController(viewModel: vm)
         panelController = controller
+        vm.panelController = controller
         
         controller.show()
         

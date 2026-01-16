@@ -7,6 +7,28 @@ final class NotchPanelController {
     private var panel: NSPanel?
     private var hostingView: NSHostingView<NotchPanelView>?
     private let viewModel: NotchViewModel
+    private var stateObservationTask: Task<Void, Never>?
+    
+    private let shadowPadding: CGFloat = 25
+    
+    var currentPanelFrame: NSRect {
+        panel?.frame ?? .zero
+    }
+    
+    var currentContentFrame: NSRect {
+        let contentSize = calculateContentSize(for: viewModel.state)
+        let panelFrame = currentPanelFrame
+        
+        let contentX = panelFrame.origin.x + (panelFrame.width - contentSize.width) / 2
+        let contentY = panelFrame.origin.y + panelFrame.height - contentSize.height - shadowPadding
+        
+        return NSRect(
+            x: contentX,
+            y: contentY,
+            width: contentSize.width,
+            height: contentSize.height
+        )
+    }
     
     init(viewModel: NotchViewModel) {
         self.viewModel = viewModel
@@ -16,7 +38,7 @@ final class NotchPanelController {
     
     private func setupPanel() {
         let geometry = viewModel.currentGeometry
-        let panelFrame = calculatePanelFrame(for: geometry)
+        let panelFrame = calculateFixedPanelFrame(geometry: geometry)
         
         let panel = NSPanel(
             contentRect: panelFrame,
@@ -45,21 +67,26 @@ final class NotchPanelController {
         
         self.panel = panel
         self.hostingView = hostingView
+        
+        updateMouseEventHandling(for: viewModel.state)
     }
     
     private func observeStateChanges() {
-        Task { @MainActor in
-            var lastState = viewModel.state
-            while true {
+        stateObservationTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            
+            var lastState = self.viewModel.state
+            
+            while !Task.isCancelled {
                 let currentState = withObservationTracking {
-                    viewModel.state
+                    self.viewModel.state
                 } onChange: {
                     Task { @MainActor in }
                 }
                 
                 if currentState != lastState {
                     lastState = currentState
-                    updateMouseEventHandling()
+                    self.updateMouseEventHandling(for: currentState)
                 }
                 
                 try? await Task.sleep(for: .milliseconds(16))
@@ -67,15 +94,12 @@ final class NotchPanelController {
         }
     }
     
-    private func updateMouseEventHandling() {
+    private func updateMouseEventHandling(for state: NotchState) {
         guard let panel = panel else { return }
-        panel.ignoresMouseEvents = viewModel.state.isClosed
+        panel.ignoresMouseEvents = !state.isExpanded
     }
     
-    private func calculatePanelFrame(for geometry: NotchGeometry) -> NSRect {
-        // Small padding for subtle shadow glow
-        let shadowPadding: CGFloat = 25
-        
+    private func calculateFixedPanelFrame(geometry: NotchGeometry) -> NSRect {
         let width = Notch.Expanded.width + (shadowPadding * 2)
         let height = Notch.Expanded.height + shadowPadding
         
@@ -85,10 +109,21 @@ final class NotchPanelController {
         return NSRect(x: x, y: y, width: width, height: height)
     }
     
+    private func calculateContentSize(for state: NotchState) -> CGSize {
+        switch state {
+        case .closed:
+            return CGSize(width: Notch.Closed.width, height: Notch.Closed.height)
+        case .playing:
+            return CGSize(width: Notch.Playing.width, height: Notch.Playing.height)
+        case .expanded:
+            return CGSize(width: Notch.Expanded.width, height: Notch.Expanded.height)
+        }
+    }
+    
     func show() {
         panel?.orderFrontRegardless()
         viewModel.startTracking()
-        updateMouseEventHandling()
+        updateMouseEventHandling(for: viewModel.state)
     }
     
     func hide() {
@@ -98,10 +133,14 @@ final class NotchPanelController {
     
     func updateForCurrentScreen() {
         viewModel.updateGeometry()
-        if let geometry = viewModel.currentGeometry as NotchGeometry?, geometry != .zero {
-            let newFrame = calculatePanelFrame(for: geometry)
+        if viewModel.currentGeometry != .zero {
+            let newFrame = calculateFixedPanelFrame(geometry: viewModel.currentGeometry)
             panel?.setFrame(newFrame, display: true, animate: false)
             hostingView?.frame = NSRect(origin: .zero, size: newFrame.size)
         }
+    }
+    
+    deinit {
+        stateObservationTask?.cancel()
     }
 }

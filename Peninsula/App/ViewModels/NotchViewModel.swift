@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import Combine
 
 @Observable
@@ -13,6 +14,8 @@ final class NotchViewModel {
     private var hoverService: HoverTrackingService?
     private var cancellables = Set<AnyCancellable>()
     private var isHovering: Bool = false
+    
+    weak var panelController: NotchPanelController?
     
     var isMusicActive: Bool {
         musicService.activeApp != nil
@@ -78,9 +81,17 @@ final class NotchViewModel {
     }
     
     private func setupHoverTracking() {
-        hoverService = HoverTrackingService { [weak self] in
-            self?.displayGeometry ?? .zero
-        }
+        hoverService = HoverTrackingService(
+            notchGeometryProvider: { [weak self] in
+                self?.currentGeometry ?? .zero
+            },
+            contentFrameProvider: { [weak self] in
+                self?.panelController?.currentContentFrame ?? .zero
+            },
+            stateProvider: { [weak self] in
+                self?.state ?? .closed
+            }
+        )
         
         hoverService?.isHovering
             .receive(on: DispatchQueue.main)
@@ -135,4 +146,3 @@ final class NotchViewModel {
         updateState()
     }
 }
-
