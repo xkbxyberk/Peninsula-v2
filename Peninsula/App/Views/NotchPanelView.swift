@@ -43,16 +43,16 @@ struct NotchPanelView: View {
                 )
                 .fill(.black)
                 .shadow(
-                    color: .black.opacity(0.25 * viewModel.expansionProgress),
-                    radius: 6 * viewModel.expansionProgress,
+                    color: .black.opacity(lerp(0.08, 0.25, viewModel.expansionProgress)),
+                    radius: lerp(2, 6, viewModel.expansionProgress),
                     x: 0,
-                    y: 2 * viewModel.expansionProgress
+                    y: lerp(0.5, 2, viewModel.expansionProgress)
                 )
                 .shadow(
-                    color: .black.opacity(0.1 * viewModel.expansionProgress),
-                    radius: 12 * viewModel.expansionProgress,
+                    color: .black.opacity(lerp(0.04, 0.1, viewModel.expansionProgress)),
+                    radius: lerp(4, 12, viewModel.expansionProgress),
                     x: 0,
-                    y: 3 * viewModel.expansionProgress
+                    y: lerp(1, 3, viewModel.expansionProgress)
                 )
                 
                 if viewModel.isMusicActive && !viewModel.state.isExpanded {
@@ -152,6 +152,10 @@ struct MiniEqualizerView: View {
             }
         }
     }
+}
+
+private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat {
+    a + (b - a) * t
 }
 
 
