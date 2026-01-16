@@ -3,6 +3,7 @@ import Combine
 
 struct NotchPanelView: View {
     @Bindable var viewModel: NotchViewModel
+    @State private var progressRingVisible: Bool = false
     
     private var animationTiming: Animation {
         .timingCurve(
@@ -55,7 +56,7 @@ struct NotchPanelView: View {
                     y: lerp(1, 3, viewModel.expansionProgress)
                 )
                 
-                if viewModel.isMusicActive && !viewModel.state.isExpanded {
+                if viewModel.isMusicActive && progressRingVisible {
                     ProgressRingShape(
                         width: closedWidth,
                         height: closedHeight
@@ -67,6 +68,7 @@ struct NotchPanelView: View {
                     )
                     .shadow(color: accentColor.opacity(0.5), radius: 4)
                     .animation(.linear(duration: 1.0), value: progressValue)
+                    .transition(.opacity.animation(.easeIn(duration: 0.25)))
                 }
                 
                 if viewModel.state.isPlaying {
@@ -84,9 +86,25 @@ struct NotchPanelView: View {
         }
         .animation(animationTiming, value: viewModel.state)
         .animation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0.1), value: viewModel.isMusicActive)
+        .onChange(of: viewModel.state.isExpanded) { _, isExpanded in
+            if isExpanded {
+                progressRingVisible = false
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    withAnimation(.easeIn(duration: 0.25)) {
+                        progressRingVisible = viewModel.isMusicActive && !viewModel.state.isExpanded
+                    }
+                }
+            }
+        }
         .onChange(of: viewModel.musicService.activeApp) { _, _ in
             withAnimation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0.1)) {
                 viewModel.refreshMusicState()
+            }
+        }
+        .onAppear {
+            if viewModel.isMusicActive && !viewModel.state.isExpanded {
+                progressRingVisible = true
             }
         }
     }
