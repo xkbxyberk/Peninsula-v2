@@ -7,9 +7,12 @@ struct NotchShape: Shape {
     var openWidth: CGFloat
     var openHeight: CGFloat
     
-    var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(progress, closedWidth) }
+        set {
+            progress = newValue.first
+            closedWidth = newValue.second
+        }
     }
     
     func path(in rect: CGRect) -> Path {
@@ -84,6 +87,11 @@ struct NotchShape: Shape {
 struct ProgressRingShape: Shape {
     var width: CGFloat
     var height: CGFloat
+    
+    var animatableData: CGFloat {
+        get { width }
+        set { width = newValue }
+    }
     
     func path(in rect: CGRect) -> Path {
         var path = Path()

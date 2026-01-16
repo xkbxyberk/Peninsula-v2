@@ -72,6 +72,7 @@ struct NotchPanelView: View {
                 if viewModel.state.isPlaying {
                     miniPlayerContent
                         .opacity(1.0 - viewModel.expansionProgress)
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
                 
                 if viewModel.state.isExpanded {
@@ -82,8 +83,11 @@ struct NotchPanelView: View {
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
         .animation(animationTiming, value: viewModel.state)
+        .animation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0.1), value: viewModel.isMusicActive)
         .onChange(of: viewModel.musicService.activeApp) { _, _ in
-            viewModel.refreshMusicState()
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0.1)) {
+                viewModel.refreshMusicState()
+            }
         }
     }
     

@@ -12,6 +12,17 @@ struct MusicPanelView: View {
     @State private var isHoveringPlay: Bool = false
     @State private var isHoveringPrev: Bool = false
     @State private var isHoveringNext: Bool = false
+    @State private var isHoveringShuffle: Bool = false
+    @State private var isPressingShuffle: Bool = false
+    @State private var isHoveringAudio: Bool = false
+    @State private var isPressingAudio: Bool = false
+    @State private var showAudioPopover: Bool = false
+    
+    private let audioService = AudioOutputService.shared
+    
+    init(musicService: MusicService) {
+        self.musicService = musicService
+    }
     
     private var accentColor: Color {
         Color(nsColor: musicService.accentColor)
@@ -37,7 +48,11 @@ struct MusicPanelView: View {
     
     private var topSection: some View {
         HStack(spacing: 16) {
-            artworkView
+            VinylRecordView(
+                artwork: musicService.artwork,
+                isPlaying: musicService.isPlaying,
+                accentColor: accentColor
+            )
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(musicService.trackName)
@@ -60,35 +75,6 @@ struct MusicPanelView: View {
             }
         }
         .padding(.horizontal, 32)
-    }
-    
-    private var artworkView: some View {
-        ZStack {
-            if musicService.isPlaying {
-                PulseRingView(color: accentColor)
-            }
-            
-            Group {
-                if let artwork = musicService.artwork {
-                    Image(nsImage: artwork)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 64, height: 64)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .shadow(color: accentColor.opacity(0.5), radius: 12, y: 2)
-                } else {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(.white.opacity(0.08))
-                        .frame(width: 64, height: 64)
-                        .overlay {
-                            Image(systemName: "music.note")
-                                .font(.system(size: 24))
-                                .foregroundStyle(.white.opacity(0.25))
-                        }
-                }
-            }
-        }
-        .frame(width: 80, height: 80)
     }
     
     private var progressSection: some View {
@@ -165,116 +151,181 @@ struct MusicPanelView: View {
     }
     
     private var controlsSection: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 12) {
+            Button(action: { musicService.toggleShuffle() }) {
+                Image(systemName: "shuffle")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(musicService.shuffleEnabled ? accentColor : .white.opacity(0.6))
+                    .frame(width: 32, height: 32)
+                    .background(
+                        Circle()
+                            .fill(musicService.shuffleEnabled ? accentColor.opacity(0.2) : .white.opacity(0.05))
+                            .overlay(
+                                Circle()
+                                    .stroke(musicService.shuffleEnabled ? accentColor.opacity(0.5) : .white.opacity(0.1), lineWidth: 1)
+                            )
+                    )
+                    .scaleEffect(isPressingShuffle ? 0.9 : (isHoveringShuffle ? 1.08 : 1.0))
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) { isHoveringShuffle = hovering }
+            }
+            .onLongPressGesture(minimumDuration: .infinity, pressing: { pressing in
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { isPressingShuffle = pressing }
+            }, perform: {})
+            
+            Spacer().frame(width: 8)
+            
             Button(action: { musicService.previousTrack() }) {
                 Image(systemName: "backward.fill")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 48, height: 48)
+                    .frame(width: 40, height: 40)
                     .background(
                         ZStack {
-                            Circle()
-                                .fill(.ultraThinMaterial)
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [accentColor.opacity(isHoveringPrev ? 0.5 : 0.3), accentColor.opacity(isHoveringPrev ? 0.2 : 0.1)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
+                            Circle().fill(.ultraThinMaterial)
+                            Circle().fill(
+                                LinearGradient(
+                                    colors: [accentColor.opacity(isHoveringPrev ? 0.5 : 0.3), accentColor.opacity(isHoveringPrev ? 0.2 : 0.1)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
                                 )
-                            Circle()
-                                .stroke(accentColor.opacity(isHoveringPrev ? 0.7 : 0.4), lineWidth: isHoveringPrev ? 1.5 : 1)
+                            )
+                            Circle().stroke(accentColor.opacity(isHoveringPrev ? 0.7 : 0.4), lineWidth: 1)
                         }
                     )
-                    .shadow(color: accentColor.opacity(isHoveringPrev ? 0.4 : 0.2), radius: isHoveringPrev ? 12 : 8, y: 2)
+                    .shadow(color: accentColor.opacity(isHoveringPrev ? 0.3 : 0.15), radius: isHoveringPrev ? 10 : 6, y: 2)
                     .scaleEffect(isPressingPrev ? 0.9 : (isHoveringPrev ? 1.08 : 1.0))
             }
             .buttonStyle(.plain)
             .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isHoveringPrev = hovering
-                }
+                withAnimation(.easeInOut(duration: 0.2)) { isHoveringPrev = hovering }
             }
             .onLongPressGesture(minimumDuration: .infinity, pressing: { pressing in
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                    isPressingPrev = pressing
-                }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { isPressingPrev = pressing }
             }, perform: {})
             
             Button(action: { musicService.playPause() }) {
                 Image(systemName: musicService.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 28, weight: .bold))
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(width: 64, height: 64)
+                    .frame(width: 52, height: 52)
                     .background(
                         ZStack {
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [accentColor, accentColor.opacity(isHoveringPlay ? 0.85 : 0.7)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
+                            Circle().fill(
+                                LinearGradient(
+                                    colors: [accentColor, accentColor.opacity(isHoveringPlay ? 0.85 : 0.7)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
                                 )
-                            Circle()
-                                .fill(.white.opacity(isHoveringPlay ? 0.25 : 0.15))
-                                .blur(radius: 2)
-                                .offset(y: -2)
-                                .mask(Circle())
+                            )
+                            Circle().fill(.white.opacity(isHoveringPlay ? 0.25 : 0.15)).blur(radius: 2).offset(y: -2).mask(Circle())
                         }
                     )
-                    .shadow(color: accentColor.opacity(isHoveringPlay ? 0.8 : 0.6), radius: isHoveringPlay ? 20 : 16, y: 4)
+                    .shadow(color: accentColor.opacity(isHoveringPlay ? 0.7 : 0.5), radius: isHoveringPlay ? 16 : 12, y: 3)
                     .scaleEffect(isPressingPlay ? 0.9 : (isHoveringPlay ? 1.08 : 1.0))
             }
             .buttonStyle(.plain)
             .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isHoveringPlay = hovering
-                }
+                withAnimation(.easeInOut(duration: 0.2)) { isHoveringPlay = hovering }
             }
             .onLongPressGesture(minimumDuration: .infinity, pressing: { pressing in
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                    isPressingPlay = pressing
-                }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { isPressingPlay = pressing }
             }, perform: {})
             
             Button(action: { musicService.nextTrack() }) {
                 Image(systemName: "forward.fill")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 48, height: 48)
+                    .frame(width: 40, height: 40)
                     .background(
                         ZStack {
-                            Circle()
-                                .fill(.ultraThinMaterial)
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [accentColor.opacity(isHoveringNext ? 0.5 : 0.3), accentColor.opacity(isHoveringNext ? 0.2 : 0.1)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
+                            Circle().fill(.ultraThinMaterial)
+                            Circle().fill(
+                                LinearGradient(
+                                    colors: [accentColor.opacity(isHoveringNext ? 0.5 : 0.3), accentColor.opacity(isHoveringNext ? 0.2 : 0.1)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
                                 )
-                            Circle()
-                                .stroke(accentColor.opacity(isHoveringNext ? 0.7 : 0.4), lineWidth: isHoveringNext ? 1.5 : 1)
+                            )
+                            Circle().stroke(accentColor.opacity(isHoveringNext ? 0.7 : 0.4), lineWidth: 1)
                         }
                     )
-                    .shadow(color: accentColor.opacity(isHoveringNext ? 0.4 : 0.2), radius: isHoveringNext ? 12 : 8, y: 2)
+                    .shadow(color: accentColor.opacity(isHoveringNext ? 0.3 : 0.15), radius: isHoveringNext ? 10 : 6, y: 2)
                     .scaleEffect(isPressingNext ? 0.9 : (isHoveringNext ? 1.08 : 1.0))
             }
             .buttonStyle(.plain)
             .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isHoveringNext = hovering
-                }
+                withAnimation(.easeInOut(duration: 0.2)) { isHoveringNext = hovering }
             }
             .onLongPressGesture(minimumDuration: .infinity, pressing: { pressing in
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                    isPressingNext = pressing
-                }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { isPressingNext = pressing }
             }, perform: {})
+            
+            Spacer().frame(width: 8)
+            
+            Button(action: { showAudioPopover.toggle() }) {
+                Image(systemName: "airplayaudio")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(width: 32, height: 32)
+                    .background(
+                        Circle()
+                            .fill(.white.opacity(0.05))
+                            .overlay(Circle().stroke(.white.opacity(0.1), lineWidth: 1))
+                    )
+                    .scaleEffect(isPressingAudio ? 0.9 : (isHoveringAudio ? 1.08 : 1.0))
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) { isHoveringAudio = hovering }
+            }
+            .onLongPressGesture(minimumDuration: .infinity, pressing: { pressing in
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { isPressingAudio = pressing }
+            }, perform: {})
+            .popover(isPresented: $showAudioPopover, arrowEdge: .bottom) {
+                audioOutputPopover
+            }
         }
+    }
+    
+    private var audioOutputPopover: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Output Device")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+            
+            Divider()
+            
+            ForEach(audioService.outputDevices) { device in
+                Button(action: {
+                    audioService.setOutputDevice(device)
+                    showAudioPopover = false
+                }) {
+                    HStack {
+                        Image(systemName: device.isDefault ? "checkmark.circle.fill" : "speaker.wave.2")
+                            .foregroundStyle(device.isDefault ? .blue : .secondary)
+                            .frame(width: 20)
+                        
+                        Text(device.name)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.primary)
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(device.isDefault ? Color.blue.opacity(0.1) : Color.clear)
+                    .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 8)
+        .frame(minWidth: 200)
     }
     
     private var emptyStateView: some View {
@@ -301,26 +352,182 @@ struct MusicPanelView: View {
     }
 }
 
-struct PulseRingView: View {
-    let color: Color
+struct VinylRecordView: View {
+    let artwork: NSImage?
+    let isPlaying: Bool
+    let accentColor: Color
     
-    @State private var scale: CGFloat = 1.0
-    @State private var opacity: Double = 0.6
+    @State private var rotation: Double = 0
+    @State private var waveScale1: CGFloat = 1.0
+    @State private var waveScale2: CGFloat = 1.0
+    @State private var waveScale3: CGFloat = 1.0
+    @State private var waveOpacity1: Double = 0.5
+    @State private var waveOpacity2: Double = 0.5
+    @State private var waveOpacity3: Double = 0.5
+    
+    private let discSize: CGFloat = 90
+    private let labelSize: CGFloat = 50
+    private let spindleSize: CGFloat = 8
+    
+    private let rotationTimer = Timer.publish(every: 1.0/60.0, on: .main, in: .common).autoconnect()
     
     var body: some View {
         ZStack {
-            ForEach(0..<2, id: \.self) { index in
+            if isPlaying {
                 Circle()
-                    .stroke(color.opacity(opacity / Double(index + 1)), lineWidth: 2)
-                    .frame(width: 64, height: 64)
-                    .scaleEffect(scale + CGFloat(index) * 0.15)
+                    .stroke(accentColor.opacity(waveOpacity1), lineWidth: 1)
+                    .frame(width: discSize, height: discSize)
+                    .scaleEffect(waveScale1)
+                
+                Circle()
+                    .stroke(accentColor.opacity(waveOpacity2), lineWidth: 1)
+                    .frame(width: discSize, height: discSize)
+                    .scaleEffect(waveScale2)
+                
+                Circle()
+                    .stroke(accentColor.opacity(waveOpacity3), lineWidth: 1)
+                    .frame(width: discSize, height: discSize)
+                    .scaleEffect(waveScale3)
+            }
+            
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [Color(white: 0.12), Color(white: 0.05)],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: discSize / 2
+                    )
+                )
+                .frame(width: discSize, height: discSize)
+            
+            ForEach(0..<8, id: \.self) { index in
+                Circle()
+                    .stroke(Color.white.opacity(0.03), lineWidth: 0.5)
+                    .frame(width: labelSize + CGFloat(index) * 6, height: labelSize + CGFloat(index) * 6)
+            }
+            
+            Circle()
+                .fill(Color(white: 0.15))
+                .frame(width: discSize - 4, height: discSize - 4)
+                .overlay(
+                    Circle()
+                        .stroke(
+                            AngularGradient(
+                                colors: [Color.white.opacity(0.1), Color.white.opacity(0.02), Color.white.opacity(0.1)],
+                                center: .center
+                            ),
+                            lineWidth: 1
+                        )
+                )
+            
+            if let artwork = artwork {
+                Image(nsImage: artwork)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: labelSize, height: labelSize)
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(Color.black.opacity(0.3), lineWidth: 1)
+                    )
+            } else {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [accentColor.opacity(0.4), accentColor.opacity(0.2)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: labelSize, height: labelSize)
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.6))
+                    )
+            }
+            
+            Circle()
+                .fill(Color.black)
+                .frame(width: spindleSize, height: spindleSize)
+            
+            if isPlaying {
+                Circle()
+                    .fill(
+                        AngularGradient(
+                            colors: [Color.white.opacity(0.2), Color.clear, Color.clear, Color.clear, Color.clear, Color.clear],
+                            center: .center,
+                            startAngle: .degrees(0),
+                            endAngle: .degrees(360)
+                        )
+                    )
+                    .frame(width: discSize - 2, height: discSize - 2)
+                    .blur(radius: 6)
+            }
+            
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [Color.white.opacity(0.15), Color.clear],
+                        center: .topLeading,
+                        startRadius: 0,
+                        endRadius: discSize / 2
+                    )
+                )
+                .frame(width: discSize, height: discSize)
+        }
+        .frame(width: discSize, height: discSize)
+        .rotationEffect(.degrees(rotation))
+        .shadow(color: isPlaying ? accentColor.opacity(0.3) : accentColor.opacity(0.15), radius: isPlaying ? 12 : 6, y: 2)
+        .onReceive(rotationTimer) { _ in
+            if isPlaying {
+                rotation += 3.33
+            }
+        }
+        .onChange(of: isPlaying) { _, playing in
+            if playing {
+                startWaveAnimations()
+            } else {
+                resetWaves()
             }
         }
         .onAppear {
-            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                scale = 1.3
-                opacity = 0.2
+            if isPlaying {
+                startWaveAnimations()
             }
+        }
+    }
+    
+    private func startWaveAnimations() {
+        withAnimation(.easeOut(duration: 3.0).repeatForever(autoreverses: false)) {
+            waveScale1 = 1.12
+            waveOpacity1 = 0
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.easeOut(duration: 3.0).repeatForever(autoreverses: false)) {
+                waveScale2 = 1.12
+                waveOpacity2 = 0
+            }
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation(.easeOut(duration: 3.0).repeatForever(autoreverses: false)) {
+                waveScale3 = 1.12
+                waveOpacity3 = 0
+            }
+        }
+    }
+    
+    private func resetWaves() {
+        withAnimation(.easeOut(duration: 0.3)) {
+            waveScale1 = 1.0
+            waveScale2 = 1.0
+            waveScale3 = 1.0
+            waveOpacity1 = 0.5
+            waveOpacity2 = 0.5
+            waveOpacity3 = 0.5
         }
     }
 }
@@ -355,6 +562,7 @@ struct BarEqualizerView: View {
         }
     }
 }
+
 
 
 

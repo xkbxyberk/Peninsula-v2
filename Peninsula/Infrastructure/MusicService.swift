@@ -22,6 +22,7 @@ final class MusicService {
     var activeApp: MusicApp?
     var currentPosition: Double = 0
     var duration: Double = 0
+    var shuffleEnabled: Bool = false
     
     private var timer: Timer?
     private var artworkCache: [String: NSImage] = [:]
@@ -96,6 +97,39 @@ final class MusicService {
             executeAppleScript("tell application \"Music\" to set player position to \(posInt)")
         case .spotify:
             executeAppleScript("tell application \"Spotify\" to set player position to \(posInt)")
+        }
+    }
+    
+    func toggleShuffle() {
+        guard let app = activeApp else { return }
+        switch app {
+        case .appleMusic:
+            executeAppleScript("tell application \"Music\" to set shuffle enabled to (not shuffle enabled)")
+        case .spotify:
+            executeAppleScript("tell application \"Spotify\" to set shuffling to (not shuffling)")
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.updateShuffleState()
+        }
+    }
+    
+    private func updateShuffleState() {
+        guard let app = activeApp else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var isShuffled = false
+            switch app {
+            case .appleMusic:
+                if let result = self?.executeAppleScript("tell application \"Music\" to return shuffle enabled") {
+                    isShuffled = result == "true"
+                }
+            case .spotify:
+                if let result = self?.executeAppleScript("tell application \"Spotify\" to return shuffling") {
+                    isShuffled = result == "true"
+                }
+            }
+            DispatchQueue.main.async {
+                self?.shuffleEnabled = isShuffled
+            }
         }
     }
     
