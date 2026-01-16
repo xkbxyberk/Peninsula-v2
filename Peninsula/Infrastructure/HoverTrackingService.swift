@@ -1,3 +1,5 @@
+// HoverTrackingService.swift
+
 import Foundation
 import AppKit
 import Combine
@@ -14,6 +16,7 @@ final class HoverTrackingService {
     
     private var currentHoverState = false
     private let hitTestPadding: CGFloat = 10
+    private let verticalZoneLimit: CGFloat = 200
     
     init(notchGeometryProvider: @escaping () -> NotchGeometry) {
         self.notchGeometryProvider = notchGeometryProvider
@@ -45,6 +48,19 @@ final class HoverTrackingService {
     
     private func handleMouseEvent(_ event: NSEvent) {
         let mouseLocation = NSEvent.mouseLocation
+        
+        guard let screen = NSScreen.main else { return }
+        let screenTop = screen.frame.maxY
+        let zoneThreshold = screenTop - verticalZoneLimit
+        
+        guard mouseLocation.y >= zoneThreshold else {
+            if currentHoverState {
+                currentHoverState = false
+                hoverSubject.send(false)
+            }
+            return
+        }
+        
         let geometry = notchGeometryProvider()
         
         let hitTestFrame = geometry.frame.expanded(by: NSEdgeInsets(

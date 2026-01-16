@@ -1,3 +1,5 @@
+// MusicService.swift
+
 import AppKit
 import Combine
 import Foundation
@@ -24,30 +26,261 @@ final class MusicService {
     var duration: Double = 0
     var shuffleEnabled: Bool = false
     
-    private var timer: Timer?
     private var artworkCache: [String: NSImage] = [:]
     private var lastTrackName: String = ""
+    private var positionTimer: Timer?
     
     init() {
-        startPolling()
-    }
-    
-    deinit {
-        timer?.invalidate()
-    }
-    
-    func startPolling() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.updateNowPlaying()
-        }
-        timer?.tolerance = 0.2
+        setupNotificationObservers()
         updateNowPlaying()
     }
     
-    func stopPolling() {
-        timer?.invalidate()
-        timer = nil
+    deinit {
+        removeNotificationObservers()
+        positionTimer?.invalidate()
+    }
+    
+    private func setupNotificationObservers() {
+        let dnc = DistributedNotificationCenter.default()
+        
+        dnc.addObserver(
+            self,
+            selector: #selector(handleSpotifyNotification(_:)),
+            name: NSNotification.Name("com.spotify.client.PlaybackStateChanged"),
+            object: nil
+        )
+        
+        dnc.addObserver(
+            self,
+            selector: #selector(handleAppleMusicNotification(_:)),
+            name: NSNotification.Name("com.apple.Music.playerInfo"),
+            object: nil
+        )
+        
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(handleAppLaunch(_:)),
+            name: NSWorkspace.didLaunchApplicationNotification,
+            object: nil
+        )
+        
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(handleAppTerminate(_:)),
+            name: NSWorkspace.didTerminateApplicationNotification,
+            object: nil
+        )
+    }
+    
+    private func removeNotificationObservers() {
+        DistributedNotificationCenter.default().removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+    }
+    
+    @objc private func handleSpotifyNotification(_ notification: Notification) {
+        guard isAppRunning(.spotify) else { return }
+        
+        if let userInfo = notification.userInfo {
+            processSpotifyPayload(userInfo)
+        } else {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.fetchSpotifyState()
+            }
+        }
+    }
+    
+    @objc private func handleAppleMusicNotification(_ notification: Notification) {
+        guard isAppRunning(.appleMusic) else { return }
+        
+        if let userInfo = notification.userInfo {
+            processAppleMusicPayload(userInfo)
+        } else {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.fetchAppleMusicState()
+            }
+        }
+    }
+    
+    @objc private func handleAppLaunch(_ notification: Notification) {
+        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+              let bundleId = app.bundleIdentifier else { return }
+        
+        if bundleId == MusicApp.appleMusic.rawValue || bundleId == MusicApp.spotify.rawValue {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.updateNowPlaying()
+            }
+        }
+    }
+    
+    @objc private func handleAppTerminate(_ notification: Notification) {
+        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+              let bundleId = app.bundleIdentifier else { return }
+        
+        if bundleId == activeApp?.rawValue {
+            DispatchQueue.main.async { [weak self] in
+                self?.clearState()
+                self?.updateNowPlaying()
+            }
+        }
+    }
+    
+    private func processSpotifyPayload(_ userInfo: [AnyHashable: Any]) {
+        let state = userInfo["Player State"] as? String ?? ""
+        let newIsPlaying = state == "Playing"
+        let newTrack = userInfo["Name"] as? String ?? ""
+        let newArtist = userInfo["Artist"] as? String ?? ""
+        let newAlbum = userInfo["Album"] as? String ?? ""
+        let newDuration = (userInfo["Duration"] as? Double ?? 0) / 1000.0
+        
+        let trackChanged = lastTrackName != newTrack
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.activeApp = .spotify
+            self.isPlaying = newIsPlaying
+            self.trackName = newTrack
+            self.artistName = newArtist
+            self.albumName = newAlbum
+            self.duration = newDuration
+            
+            if trackChanged {
+                self.lastTrackName = newTrack
+                self.fetchSpotifyArtwork()
+            }
+            
+            self.managePositionTracking()
+        }
+    }
+    
+    private func processAppleMusicPayload(_ userInfo: [AnyHashable: Any]) {
+        let state = userInfo["Player State"] as? String ?? ""
+        let newIsPlaying = state == "Playing"
+        let newTrack = userInfo["Name"] as? String ?? ""
+        let newArtist = userInfo["Artist"] as? String ?? ""
+        let newAlbum = userInfo["Album"] as? String ?? ""
+        let newDuration = userInfo["Total Time"] as? Double ?? 0
+        
+        let trackChanged = lastTrackName != newTrack
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.activeApp = .appleMusic
+            self.isPlaying = newIsPlaying
+            self.trackName = newTrack
+            self.artistName = newArtist
+            self.albumName = newAlbum
+            self.duration = newDuration / 1000.0
+            
+            if trackChanged {
+                self.lastTrackName = newTrack
+                self.loadAppleMusicArtwork()
+            }
+            
+            self.managePositionTracking()
+        }
+    }
+    
+    private func managePositionTracking() {
+        positionTimer?.invalidate()
+        positionTimer = nil
+        
+        guard isPlaying else { return }
+        
+        positionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.updatePositionOnly()
+        }
+        positionTimer?.tolerance = 0.1
+        updatePositionOnly()
+    }
+    
+    private func updatePositionOnly() {
+        guard let app = activeApp else { return }
+        
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            
+            let position: Double
+            switch app {
+            case .appleMusic:
+                position = self.getAppleMusicPosition().position
+            case .spotify:
+                position = self.getSpotifyPosition().position
+            }
+            
+            DispatchQueue.main.async {
+                self.currentPosition = position
+            }
+        }
+    }
+    
+    private func fetchSpotifyState() {
+        guard let info = getSpotifyTrackInfo() else { return }
+        let (position, dur) = getSpotifyPosition()
+        let trackChanged = lastTrackName != info.track
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.activeApp = .spotify
+            self.isPlaying = info.isPlaying
+            self.trackName = info.track
+            self.artistName = info.artist
+            self.albumName = info.album
+            self.currentPosition = position
+            self.duration = dur
+            
+            if trackChanged {
+                self.lastTrackName = info.track
+                if let url = info.artworkURL {
+                    self.loadSpotifyArtwork(from: url)
+                }
+            }
+            
+            self.managePositionTracking()
+        }
+    }
+    
+    private func fetchAppleMusicState() {
+        guard let info = getAppleMusicTrackInfo() else { return }
+        let (position, dur) = getAppleMusicPosition()
+        let trackChanged = lastTrackName != info.track
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.activeApp = .appleMusic
+            self.isPlaying = info.isPlaying
+            self.trackName = info.track
+            self.artistName = info.artist
+            self.albumName = info.album
+            self.currentPosition = position
+            self.duration = dur
+            
+            if trackChanged {
+                self.lastTrackName = info.track
+                self.loadAppleMusicArtwork()
+            }
+            
+            self.managePositionTracking()
+        }
+    }
+    
+    private func fetchSpotifyArtwork() {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            
+            let script = """
+            tell application "Spotify"
+                try
+                    return artwork url of current track
+                on error
+                    return ""
+                end try
+            end tell
+            """
+            
+            if let urlString = self.executeAppleScript(script), !urlString.isEmpty {
+                self.loadSpotifyArtwork(from: urlString)
+            }
+        }
     }
     
     func playPause() {
@@ -57,9 +290,6 @@ final class MusicService {
             executeAppleScript("tell application \"Music\" to playpause")
         case .spotify:
             executeAppleScript("tell application \"Spotify\" to playpause")
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            self?.updateNowPlaying()
         }
     }
     
@@ -71,9 +301,6 @@ final class MusicService {
         case .spotify:
             executeAppleScript("tell application \"Spotify\" to next track")
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.updateNowPlaying()
-        }
     }
     
     func previousTrack() {
@@ -83,9 +310,6 @@ final class MusicService {
             executeAppleScript("tell application \"Music\" to previous track")
         case .spotify:
             executeAppleScript("tell application \"Spotify\" to previous track")
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.updateNowPlaying()
         }
     }
     
@@ -138,61 +362,33 @@ final class MusicService {
             guard let self else { return }
             
             if self.isAppRunning(.appleMusic) {
-                if let info = self.getAppleMusicTrackInfo() {
-                    let (position, dur) = self.getAppleMusicPosition()
-                    let trackChanged = self.lastTrackName != info.track
-                    DispatchQueue.main.async {
-                        self.activeApp = .appleMusic
-                        self.isPlaying = info.isPlaying
-                        self.trackName = info.track
-                        self.artistName = info.artist
-                        self.albumName = info.album
-                        self.currentPosition = position
-                        self.duration = dur
-                        if trackChanged {
-                            self.lastTrackName = info.track
-                            self.loadAppleMusicArtwork()
-                        }
-                    }
-                    return
-                }
+                self.fetchAppleMusicState()
+                return
             }
             
             if self.isAppRunning(.spotify) {
-                if let info = self.getSpotifyTrackInfo() {
-                    let (position, dur) = self.getSpotifyPosition()
-                    let trackChanged = self.lastTrackName != info.track
-                    DispatchQueue.main.async {
-                        self.activeApp = .spotify
-                        self.isPlaying = info.isPlaying
-                        self.trackName = info.track
-                        self.artistName = info.artist
-                        self.albumName = info.album
-                        self.currentPosition = position
-                        self.duration = dur
-                        if trackChanged {
-                            self.lastTrackName = info.track
-                            if let url = info.artworkURL {
-                                self.loadSpotifyArtwork(from: url)
-                            }
-                        }
-                    }
-                    return
-                }
+                self.fetchSpotifyState()
+                return
             }
             
             DispatchQueue.main.async {
-                self.activeApp = nil
-                self.isPlaying = false
-                self.trackName = ""
-                self.artistName = ""
-                self.albumName = ""
-                self.artwork = nil
-                self.currentPosition = 0
-                self.duration = 0
-                self.lastTrackName = ""
+                self.clearState()
             }
         }
+    }
+    
+    private func clearState() {
+        activeApp = nil
+        isPlaying = false
+        trackName = ""
+        artistName = ""
+        albumName = ""
+        artwork = nil
+        currentPosition = 0
+        duration = 0
+        lastTrackName = ""
+        positionTimer?.invalidate()
+        positionTimer = nil
     }
     
     private func isAppRunning(_ app: MusicApp) -> Bool {
@@ -370,7 +566,9 @@ final class MusicService {
     private func loadSpotifyArtwork(from urlString: String) {
         let cacheKey = urlString
         if let cached = artworkCache[cacheKey] {
-            self.artwork = cached
+            DispatchQueue.main.async { [weak self] in
+                self?.artwork = cached
+            }
             return
         }
         
@@ -461,4 +659,3 @@ final class MusicService {
         }
     }
 }
-
