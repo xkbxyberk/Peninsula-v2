@@ -3,9 +3,36 @@ import AppKit
 import SwiftUI
 import Combine
 
+// MARK: - Custom Hosting View with Hit-Test Override
+
+/// NSHostingView subclass'ı, Notch şeklinin dışındaki tıklamaları geçiren hit-test override sağlar.
+final class NotchHostingView<Content: View>: NSHostingView<Content> {
+    
+    /// Hit-test için CGPath sağlayan closure
+    var hitTestPathProvider: (() -> CGPath?)?
+    
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let path = hitTestPathProvider?() else {
+            return super.hitTest(point)
+        }
+        
+        // macOS view koordinatları: (0,0) sol-alt köşe
+        // Path'in noktayı içerip içermediğini kontrol et
+        if path.contains(point) {
+            return super.hitTest(point)
+        }
+        
+        // Path dışındaysa, click-through için nil dön
+        // Bu, tıklamanın arkadaki pencereye iletilmesini sağlar
+        return nil
+    }
+}
+
+// MARK: - Notch Panel Controller
+
 final class NotchPanelController {
     private var panel: NSPanel?
-    private var hostingView: NSHostingView<NotchPanelView>?
+    private var hostingView: NotchHostingView<NotchPanelView>?
     private let viewModel: NotchViewModel
     private var stateObservationTask: Task<Void, Never>?
     
@@ -60,8 +87,13 @@ final class NotchPanelController {
         panel.titleVisibility = .hidden
         
         let contentView = NotchPanelView(viewModel: viewModel)
-        let hostingView = NSHostingView(rootView: contentView)
+        let hostingView = NotchHostingView(rootView: contentView)
         hostingView.frame = NSRect(origin: .zero, size: panelFrame.size)
+        
+        // Hit-test path provider'ı ayarla
+        hostingView.hitTestPathProvider = { [weak self] in
+            self?.createHitTestPath()
+        }
         
         panel.contentView = hostingView
         
@@ -69,6 +101,20 @@ final class NotchPanelController {
         self.hostingView = hostingView
         
         updateMouseEventHandling(for: viewModel.state)
+    }
+    
+    /// Mevcut animasyon durumuna göre hit-test için CGPath oluşturur
+    private func createHitTestPath() -> CGPath? {
+        guard let panel = panel else { return nil }
+        
+        return NotchHitTestPath.createPath(
+            progress: viewModel.expansionProgress,
+            closedWidth: viewModel.baseWidth,
+            closedHeight: viewModel.baseHeight,
+            openWidth: Notch.Expanded.width,
+            openHeight: Notch.Expanded.height,
+            in: CGRect(origin: .zero, size: panel.frame.size)
+        )
     }
     
     private func observeStateChanges() {
@@ -96,7 +142,9 @@ final class NotchPanelController {
     
     private func updateMouseEventHandling(for state: NotchState) {
         guard let panel = panel else { return }
-        panel.ignoresMouseEvents = !state.isExpanded
+        // Panel artık her zaman mouse event'lerini kabul ediyor
+        // Click-through davranışı NotchHostingView.hitTest() tarafından yönetiliyor
+        panel.ignoresMouseEvents = false
     }
     
     private func calculateFixedPanelFrame(geometry: NotchGeometry) -> NSRect {
@@ -144,3 +192,4 @@ final class NotchPanelController {
         stateObservationTask?.cancel()
     }
 }
+

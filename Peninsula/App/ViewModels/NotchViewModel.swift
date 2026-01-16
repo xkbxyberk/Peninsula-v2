@@ -90,6 +90,9 @@ final class NotchViewModel {
             },
             stateProvider: { [weak self] in
                 self?.state ?? .closed
+            },
+            hitTestInfoProvider: { [weak self] in
+                self?.currentHitTestInfo
             }
         )
         
@@ -99,6 +102,31 @@ final class NotchViewModel {
                 self?.handleHoverChange(isHovering)
             }
             .store(in: &cancellables)
+    }
+    
+    /// Hit-test için gereken tüm bilgileri döndürür
+    var currentHitTestInfo: NotchHitTestPath.HitTestInfo? {
+        guard let panelController = panelController else { return nil }
+        
+        let panelFrame = panelController.currentPanelFrame
+        guard panelFrame != .zero else { return nil }
+        
+        let shadowPadding: CGFloat = 25
+        
+        let path = NotchHitTestPath.createPath(
+            progress: expansionProgress,
+            closedWidth: baseWidth,
+            closedHeight: baseHeight,
+            openWidth: Notch.Expanded.width,
+            openHeight: Notch.Expanded.height,
+            in: CGRect(origin: .zero, size: panelFrame.size)
+        )
+        
+        return NotchHitTestPath.HitTestInfo(
+            path: path,
+            panelFrame: panelFrame,
+            shadowPadding: shadowPadding
+        )
     }
     
     private func handleHoverChange(_ hovering: Bool) {

@@ -9,6 +9,7 @@ final class HoverTrackingService {
     private let notchGeometryProvider: () -> NotchGeometry
     private let contentFrameProvider: () -> NSRect
     private let stateProvider: () -> NotchState
+    private let hitTestInfoProvider: () -> NotchHitTestPath.HitTestInfo?
     
     private let hoverSubject = CurrentValueSubject<Bool, Never>(false)
     var isHovering: AnyPublisher<Bool, Never> {
@@ -25,11 +26,13 @@ final class HoverTrackingService {
     init(
         notchGeometryProvider: @escaping () -> NotchGeometry,
         contentFrameProvider: @escaping () -> NSRect,
-        stateProvider: @escaping () -> NotchState
+        stateProvider: @escaping () -> NotchState,
+        hitTestInfoProvider: @escaping () -> NotchHitTestPath.HitTestInfo?
     ) {
         self.notchGeometryProvider = notchGeometryProvider
         self.contentFrameProvider = contentFrameProvider
         self.stateProvider = stateProvider
+        self.hitTestInfoProvider = hitTestInfoProvider
     }
     
     func startTracking() {
@@ -102,10 +105,17 @@ final class HoverTrackingService {
     }
     
     private func isInActiveZone(_ point: CGPoint) -> Bool {
+        // Entry zone her zaman kabul edilir (giriş kolaylığı için)
         if isInEntryZone(point) {
             return true
         }
         
+        // Geometrik path kontrolü - hassas hit-testing
+        if let hitTestInfo = hitTestInfoProvider() {
+            return hitTestInfo.contains(screenPoint: point)
+        }
+        
+        // Fallback: eski dikdörtgen tabanlı kontrol
         let contentFrame = contentFrameProvider()
         guard contentFrame != .zero else { return false }
         
@@ -152,3 +162,4 @@ final class HoverTrackingService {
         stopTracking()
     }
 }
+

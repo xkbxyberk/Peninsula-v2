@@ -97,14 +97,42 @@ struct NotchPanelView: View {
                 }
             }
         }
-        .onChange(of: viewModel.musicService.activeApp) { _, _ in
+        .onChange(of: viewModel.musicService.activeApp) { _, newActiveApp in
             withAnimation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0.1)) {
                 viewModel.refreshMusicState()
             }
+            
+            // Müzik uygulaması aktif hale geldiğinde ve panel kapalıysa progress ring'i göster
+            if newActiveApp != nil && !viewModel.state.isExpanded && !progressRingVisible {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation(.easeIn(duration: 0.25)) {
+                        // Tekrar kontrol et - durum değişmiş olabilir
+                        if viewModel.isMusicActive && !viewModel.state.isExpanded {
+                            progressRingVisible = true
+                        }
+                    }
+                }
+            } else if newActiveApp == nil {
+                // Müzik uygulaması kapandığında progress ring'i gizle
+                withAnimation(.easeOut(duration: 0.2)) {
+                    progressRingVisible = false
+                }
+            }
         }
         .onAppear {
+            // İlk açılışta müzik aktifse, kısa bir delay ile progress ring'i göster
+            // Bu delay, MusicService'in durumu algılaması için zaman tanır
             if viewModel.isMusicActive && !viewModel.state.isExpanded {
                 progressRingVisible = true
+            } else {
+                // Eğer henüz aktif değilse, kısa süre sonra tekrar kontrol et
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if viewModel.isMusicActive && !viewModel.state.isExpanded && !progressRingVisible {
+                        withAnimation(.easeIn(duration: 0.25)) {
+                            progressRingVisible = true
+                        }
+                    }
+                }
             }
         }
     }
