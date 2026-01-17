@@ -117,27 +117,15 @@ final class NotchPanelController {
         )
     }
     
+    private var cancellables = Set<AnyCancellable>()
+
     private func observeStateChanges() {
-        stateObservationTask = Task { @MainActor [weak self] in
-            guard let self = self else { return }
-            
-            var lastState = self.viewModel.state
-            
-            while !Task.isCancelled {
-                let currentState = withObservationTracking {
-                    self.viewModel.state
-                } onChange: {
-                    Task { @MainActor in }
-                }
-                
-                if currentState != lastState {
-                    lastState = currentState
-                    self.updateMouseEventHandling(for: currentState)
-                }
-                
-                try? await Task.sleep(for: .milliseconds(16))
+        viewModel.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                self?.updateMouseEventHandling(for: state)
             }
-        }
+            .store(in: &cancellables)
     }
     
     private func updateMouseEventHandling(for state: NotchState) {

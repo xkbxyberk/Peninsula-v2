@@ -2,11 +2,10 @@ import Foundation
 import CoreGraphics
 import Combine
 
-@Observable
-final class NotchViewModel {
-    private(set) var state: NotchState = .closed
-    private(set) var currentGeometry: NotchGeometry = .zero
-    private(set) var displayGeometry: NotchGeometry = .zero
+final class NotchViewModel: ObservableObject {
+    @Published private(set) var state: NotchState = .closed
+    @Published private(set) var currentGeometry: NotchGeometry = .zero
+    @Published private(set) var displayGeometry: NotchGeometry = .zero
     
     let musicService = MusicService()
     

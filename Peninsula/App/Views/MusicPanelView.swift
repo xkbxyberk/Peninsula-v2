@@ -2,7 +2,7 @@ import SwiftUI
 import Combine
 
 struct MusicPanelView: View {
-    @Bindable var musicService: MusicService
+    @ObservedObject var musicService: MusicService
     @State private var isSeeking: Bool = false
     @State private var seekPosition: Double = 0
     @State private var isHoveringProgress: Bool = false
@@ -496,14 +496,14 @@ struct VinylRecordView: View {
                 rotation += 3.33
             }
         }
-        .onChange(of: isPlaying) { _, playing in
+        .onChange(of: isPlaying) { playing in
             if playing {
                 startWaveAnimations()
             } else {
                 resetWaves()
             }
         }
-        .onChange(of: artwork) { _, newArtwork in
+        .onChange(of: artwork) { newArtwork in
             withAnimation(.easeInOut(duration: 0.25)) {
                 displayedArtwork = newArtwork
             }

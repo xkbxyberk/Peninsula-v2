@@ -2,7 +2,7 @@ import SwiftUI
 import Combine
 
 struct NotchPanelView: View {
-    @Bindable var viewModel: NotchViewModel
+    @ObservedObject var viewModel: NotchViewModel
     @State private var progressRingVisible: Bool = false
     
     private var animationTiming: Animation {
@@ -86,7 +86,7 @@ struct NotchPanelView: View {
         }
         .animation(animationTiming, value: viewModel.state)
         .animation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0.1), value: viewModel.isMusicActive)
-        .onChange(of: viewModel.state.isExpanded) { _, isExpanded in
+        .onChange(of: viewModel.state.isExpanded) { isExpanded in
             if isExpanded {
                 progressRingVisible = false
             } else {
@@ -97,7 +97,7 @@ struct NotchPanelView: View {
                 }
             }
         }
-        .onChange(of: viewModel.musicService.activeApp) { _, newActiveApp in
+        .onChange(of: viewModel.musicService.activeApp) { newActiveApp in
             withAnimation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0.1)) {
                 viewModel.refreshMusicState()
             }

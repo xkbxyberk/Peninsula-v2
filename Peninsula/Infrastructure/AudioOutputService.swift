@@ -1,6 +1,7 @@
 import Foundation
 import CoreAudio
 import AVFoundation
+import Combine
 
 struct AudioOutputDevice: Identifiable, Hashable {
     let id: AudioDeviceID
@@ -9,12 +10,11 @@ struct AudioOutputDevice: Identifiable, Hashable {
     let isDefault: Bool
 }
 
-@Observable
-final class AudioOutputService {
+final class AudioOutputService: ObservableObject {
     static let shared = AudioOutputService()
     
-    var outputDevices: [AudioOutputDevice] = []
-    var currentDevice: AudioOutputDevice?
+    @Published var outputDevices: [AudioOutputDevice] = []
+    @Published var currentDevice: AudioOutputDevice?
     
     private init() {
         refreshDevices()

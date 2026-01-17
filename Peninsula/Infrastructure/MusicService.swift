@@ -9,23 +9,22 @@ enum MusicApp: String {
     case spotify = "com.spotify.client"
 }
 
-@Observable
-final class MusicService {
-    var isPlaying: Bool = false
-    var trackName: String = ""
-    var artistName: String = ""
-    var albumName: String = ""
-    var artwork: NSImage? {
+final class MusicService: ObservableObject {
+    @Published var isPlaying: Bool = false
+    @Published var trackName: String = ""
+    @Published var artistName: String = ""
+    @Published var albumName: String = ""
+    @Published var artwork: NSImage? {
         didSet {
             updateAccentColor()
         }
     }
-    var accentColor: NSColor = .white
-    var activeApp: MusicApp?
-    var currentPosition: Double = 0
-    var duration: Double = 0
-    var shuffleEnabled: Bool = false
-    var isSeeking: Bool = false
+    @Published var accentColor: NSColor = .white
+    @Published var activeApp: MusicApp?
+    @Published var currentPosition: Double = 0
+    @Published var duration: Double = 0
+    @Published var shuffleEnabled: Bool = false
+    @Published var isSeeking: Bool = false
     
     private var artworkCache: [String: NSImage] = [:]
     private var currentTrackIdentifier: String = ""
