@@ -368,6 +368,7 @@ struct VinylRecordView: View {
     @State private var waveOpacity1: Double = 0.5
     @State private var waveOpacity2: Double = 0.5
     @State private var waveOpacity3: Double = 0.5
+    @State private var displayedArtwork: NSImage?
     
     private let discSize: CGFloat = 90
     private let labelSize: CGFloat = 50
@@ -425,32 +426,38 @@ struct VinylRecordView: View {
                         )
                 )
             
-            if let artwork = artwork {
-                Image(nsImage: artwork)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: labelSize, height: labelSize)
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color.black.opacity(0.3), lineWidth: 1)
-                    )
-            } else {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [accentColor.opacity(0.4), accentColor.opacity(0.2)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+            // Artwork with crossfade transition
+            ZStack {
+                if let displayed = displayedArtwork {
+                    Image(nsImage: displayed)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: labelSize, height: labelSize)
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(Color.black.opacity(0.3), lineWidth: 1)
                         )
-                    )
-                    .frame(width: labelSize, height: labelSize)
-                    .overlay(
-                        Image(systemName: "music.note")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.6))
-                    )
+                        .transition(.opacity)
+                } else {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [accentColor.opacity(0.4), accentColor.opacity(0.2)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: labelSize, height: labelSize)
+                        .overlay(
+                            Image(systemName: "music.note")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.6))
+                        )
+                        .transition(.opacity)
+                }
             }
+            .animation(.easeInOut(duration: 0.25), value: displayedArtwork)
             
             Circle()
                 .fill(Color.black)
@@ -496,7 +503,13 @@ struct VinylRecordView: View {
                 resetWaves()
             }
         }
+        .onChange(of: artwork) { _, newArtwork in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                displayedArtwork = newArtwork
+            }
+        }
         .onAppear {
+            displayedArtwork = artwork
             if isPlaying {
                 startWaveAnimations()
             }

@@ -28,7 +28,9 @@ final class MusicService {
     var isSeeking: Bool = false
     
     private var artworkCache: [String: NSImage] = [:]
-    private var lastTrackName: String = ""
+    private var currentTrackIdentifier: String = ""
+    private var currentArtworkRequestId: UUID?
+    private var artworkLoadWorkItem: DispatchWorkItem?
     private var positionTimer: Timer?
     
     init() {
@@ -133,7 +135,8 @@ final class MusicService {
         let newAlbum = userInfo["Album"] as? String ?? ""
         let newDuration = (userInfo["Duration"] as? Double ?? 0) / 1000.0
         
-        let trackChanged = lastTrackName != newTrack
+        let newIdentifier = "\(newTrack)|\(newArtist)|\(newAlbum)"
+        let trackChanged = currentTrackIdentifier != newIdentifier
         
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -145,8 +148,9 @@ final class MusicService {
             self.duration = newDuration
             
             if trackChanged {
-                self.lastTrackName = newTrack
-                self.fetchSpotifyArtwork()
+                self.currentTrackIdentifier = newIdentifier
+                self.artwork = nil  // Immediately clear old artwork
+                self.scheduleArtworkLoad { self.fetchSpotifyArtwork() }
             }
             
             self.managePositionTracking()
@@ -161,7 +165,8 @@ final class MusicService {
         let newAlbum = userInfo["Album"] as? String ?? ""
         let newDuration = userInfo["Total Time"] as? Double ?? 0
         
-        let trackChanged = lastTrackName != newTrack
+        let newIdentifier = "\(newTrack)|\(newArtist)|\(newAlbum)"
+        let trackChanged = currentTrackIdentifier != newIdentifier
         
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -173,8 +178,9 @@ final class MusicService {
             self.duration = newDuration / 1000.0
             
             if trackChanged {
-                self.lastTrackName = newTrack
-                self.loadAppleMusicArtwork()
+                self.currentTrackIdentifier = newIdentifier
+                self.artwork = nil  // Immediately clear old artwork
+                self.scheduleArtworkLoad { self.loadAppleMusicArtwork() }
             }
             
             self.managePositionTracking()
@@ -217,7 +223,8 @@ final class MusicService {
     private func fetchSpotifyState() {
         guard let info = getSpotifyTrackInfo() else { return }
         let (position, dur) = getSpotifyPosition()
-        let trackChanged = lastTrackName != info.track
+        let newIdentifier = "\(info.track)|\(info.artist)|\(info.album)"
+        let trackChanged = currentTrackIdentifier != newIdentifier
         
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -230,9 +237,10 @@ final class MusicService {
             self.duration = dur
             
             if trackChanged {
-                self.lastTrackName = info.track
+                self.currentTrackIdentifier = newIdentifier
+                self.artwork = nil  // Immediately clear old artwork
                 if let url = info.artworkURL {
-                    self.loadSpotifyArtwork(from: url)
+                    self.scheduleArtworkLoad { self.loadSpotifyArtwork(from: url) }
                 }
             }
             
@@ -243,7 +251,8 @@ final class MusicService {
     private func fetchAppleMusicState() {
         guard let info = getAppleMusicTrackInfo() else { return }
         let (position, dur) = getAppleMusicPosition()
-        let trackChanged = lastTrackName != info.track
+        let newIdentifier = "\(info.track)|\(info.artist)|\(info.album)"
+        let trackChanged = currentTrackIdentifier != newIdentifier
         
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -256,17 +265,36 @@ final class MusicService {
             self.duration = dur
             
             if trackChanged {
-                self.lastTrackName = info.track
-                self.loadAppleMusicArtwork()
+                self.currentTrackIdentifier = newIdentifier
+                self.artwork = nil  // Immediately clear old artwork
+                self.scheduleArtworkLoad { self.loadAppleMusicArtwork() }
             }
             
             self.managePositionTracking()
         }
     }
     
+    /// Debounce artwork loading to prevent rapid consecutive requests during fast track skipping
+    private func scheduleArtworkLoad(_ loadAction: @escaping () -> Void) {
+        artworkLoadWorkItem?.cancel()
+        
+        let requestId = UUID()
+        currentArtworkRequestId = requestId
+        
+        artworkLoadWorkItem = DispatchWorkItem { [weak self] in
+            guard let self, self.currentArtworkRequestId == requestId else { return }
+            loadAction()
+        }
+        
+        // 150ms debounce - prevents unnecessary requests during rapid skipping
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: artworkLoadWorkItem!)
+    }
+    
     private func fetchSpotifyArtwork() {
+        let requestId = currentArtworkRequestId
+        
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
+            guard let self, self.currentArtworkRequestId == requestId else { return }
             
             let script = """
             tell application "Spotify"
@@ -279,7 +307,9 @@ final class MusicService {
             """
             
             if let urlString = self.executeAppleScript(script), !urlString.isEmpty {
-                self.loadSpotifyArtwork(from: urlString)
+                // Verify request is still valid before loading
+                guard self.currentArtworkRequestId == requestId else { return }
+                self.loadSpotifyArtwork(from: urlString, requestId: requestId)
             }
         }
     }
@@ -392,7 +422,10 @@ final class MusicService {
         artwork = nil
         currentPosition = 0
         duration = 0
-        lastTrackName = ""
+        currentTrackIdentifier = ""
+        currentArtworkRequestId = nil
+        artworkLoadWorkItem?.cancel()
+        artworkLoadWorkItem = nil
         positionTimer?.invalidate()
         positionTimer = nil
     }
@@ -501,9 +534,10 @@ final class MusicService {
     private func loadAppleMusicArtwork() {
         let artist = self.artistName
         let album = self.albumName
+        let requestId = currentArtworkRequestId
         
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
+            guard let self, self.currentArtworkRequestId == requestId else { return }
             
             let script = """
             tell application "Music"
@@ -523,23 +557,27 @@ final class MusicService {
             
             var error: NSDictionary?
             guard let appleScript = NSAppleScript(source: script) else {
-                self.fetchArtworkFromiTunes(artist: artist, album: album)
+                self.fetchArtworkFromiTunes(artist: artist, album: album, requestId: requestId)
                 return
             }
             let result = appleScript.executeAndReturnError(&error)
             
+            // Verify request is still valid before updating artwork
+            guard self.currentArtworkRequestId == requestId else { return }
+            
             let imageData = result.data
             if imageData.count > 0, let image = NSImage(data: imageData) {
                 DispatchQueue.main.async {
+                    guard self.currentArtworkRequestId == requestId else { return }
                     self.artwork = image
                 }
             } else {
-                self.fetchArtworkFromiTunes(artist: artist, album: album)
+                self.fetchArtworkFromiTunes(artist: artist, album: album, requestId: requestId)
             }
         }
     }
     
-    private func fetchArtworkFromiTunes(artist: String, album: String) {
+    private func fetchArtworkFromiTunes(artist: String, album: String, requestId: UUID?) {
         let searchTerm = "\(artist) \(album)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         let urlString = "https://itunes.apple.com/search?term=\(searchTerm)&media=music&entity=album&limit=1"
         
@@ -547,6 +585,7 @@ final class MusicService {
         
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             guard let self, let data else { return }
+            guard self.currentArtworkRequestId == requestId else { return }
             
             do {
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -559,7 +598,9 @@ final class MusicService {
                     if let imageUrl = URL(string: highResUrl) {
                         URLSession.shared.dataTask(with: imageUrl) { [weak self] imgData, _, _ in
                             guard let self, let imgData, let image = NSImage(data: imgData) else { return }
+                            guard self.currentArtworkRequestId == requestId else { return }
                             DispatchQueue.main.async {
+                                guard self.currentArtworkRequestId == requestId else { return }
                                 self.artwork = image
                             }
                         }.resume()
@@ -569,11 +610,14 @@ final class MusicService {
         }.resume()
     }
     
-    private func loadSpotifyArtwork(from urlString: String) {
+    private func loadSpotifyArtwork(from urlString: String, requestId: UUID? = nil) {
         let cacheKey = urlString
+        let activeRequestId = requestId ?? currentArtworkRequestId
+        
         if let cached = artworkCache[cacheKey] {
             DispatchQueue.main.async { [weak self] in
-                self?.artwork = cached
+                guard let self, self.currentArtworkRequestId == activeRequestId else { return }
+                self.artwork = cached
             }
             return
         }
@@ -582,7 +626,9 @@ final class MusicService {
         
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             guard let self, let data, let image = NSImage(data: data) else { return }
+            guard self.currentArtworkRequestId == activeRequestId else { return }
             DispatchQueue.main.async {
+                guard self.currentArtworkRequestId == activeRequestId else { return }
                 self.artworkCache[cacheKey] = image
                 self.artwork = image
             }
