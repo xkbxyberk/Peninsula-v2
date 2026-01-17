@@ -3,7 +3,6 @@ import Combine
 
 struct NotchPanelView: View {
     @ObservedObject var viewModel: NotchViewModel
-    @State private var progressRingVisible: Bool = false
     
     private var animationTiming: Animation {
         .timingCurve(
@@ -56,20 +55,21 @@ struct NotchPanelView: View {
                     y: lerp(1, 3, viewModel.expansionProgress)
                 )
                 
-                if viewModel.isMusicActive && progressRingVisible {
-                    ProgressRingShape(
-                        width: closedWidth,
-                        height: closedHeight
-                    )
-                    .trim(from: 0, to: progressValue)
-                    .stroke(
-                        accentColor,
-                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
-                    )
-                    .shadow(color: accentColor.opacity(0.5), radius: 4)
-                    .animation(.linear(duration: 1.0), value: progressValue)
-                    .transition(.opacity.animation(.easeIn(duration: 0.25)))
-                }
+                // Progress ring - use viewModel.showProgressRing for reliable reactivity
+                // Progress ring - always in tree but managed by opacity for smoother transitions
+                ProgressRingShape(
+                    width: closedWidth,
+                    height: closedHeight
+                )
+                .trim(from: 0, to: progressValue)
+                .stroke(
+                    accentColor,
+                    style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                )
+                .shadow(color: accentColor.opacity(0.5), radius: 4)
+                .animation(.linear(duration: 1.0), value: progressValue)
+                .opacity(viewModel.showProgressRing ? 1 : 0)
+                .animation(.easeIn(duration: 0.25), value: viewModel.showProgressRing)
                 
                 if viewModel.state.isPlaying {
                     miniPlayerContent
@@ -85,55 +85,16 @@ struct NotchPanelView: View {
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
         .animation(animationTiming, value: viewModel.state)
-        .animation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0.1), value: viewModel.isMusicActive)
-        .onChange(of: viewModel.state.isExpanded) { isExpanded in
-            if isExpanded {
-                progressRingVisible = false
-            } else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    withAnimation(.easeIn(duration: 0.25)) {
-                        progressRingVisible = viewModel.isMusicActive && !viewModel.state.isExpanded
-                    }
-                }
-            }
-        }
-        .onChange(of: viewModel.musicService.activeApp) { newActiveApp in
+        .animation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0.1), value: viewModel.showProgressRing)
+        .onChange(of: viewModel.musicService.activeApp) { _ in
+            // Trigger state refresh when music app changes
             withAnimation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0.1)) {
                 viewModel.refreshMusicState()
             }
-            
-            // Müzik uygulaması aktif hale geldiğinde ve panel kapalıysa progress ring'i göster
-            if newActiveApp != nil && !viewModel.state.isExpanded && !progressRingVisible {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    withAnimation(.easeIn(duration: 0.25)) {
-                        // Tekrar kontrol et - durum değişmiş olabilir
-                        if viewModel.isMusicActive && !viewModel.state.isExpanded {
-                            progressRingVisible = true
-                        }
-                    }
-                }
-            } else if newActiveApp == nil {
-                // Müzik uygulaması kapandığında progress ring'i gizle
-                withAnimation(.easeOut(duration: 0.2)) {
-                    progressRingVisible = false
-                }
-            }
         }
         .onAppear {
-            // İlk açılışta müzik aktifse, kısa bir delay ile progress ring'i göster
-            // Bu delay, MusicService'in durumu algılaması için zaman tanır
-            if viewModel.isMusicActive && !viewModel.state.isExpanded {
-                progressRingVisible = true
-            } else {
-                // Eğer henüz aktif değilse, kısa süre sonra tekrar kontrol et
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    if viewModel.isMusicActive && !viewModel.state.isExpanded && !progressRingVisible {
-                        withAnimation(.easeIn(duration: 0.25)) {
-                            progressRingVisible = true
-                        }
-                    }
-                }
-            }
+            // Request initial state check in case music is already playing
+            viewModel.refreshMusicState()
         }
     }
     
@@ -171,8 +132,18 @@ struct NotchPanelView: View {
     
     @ViewBuilder
     private var expandedContent: some View {
-        MusicPanelView(musicService: viewModel.musicService)
+        if viewModel.isMusicActive {
+            MusicPanelView(musicService: viewModel.musicService)
+                .padding(.top, 50)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+        } else {
+            DashboardPanelView(
+                weatherService: viewModel.weatherService,
+                calendarService: viewModel.calendarService
+            )
             .padding(.top, 50)
+            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+        }
     }
 }
 

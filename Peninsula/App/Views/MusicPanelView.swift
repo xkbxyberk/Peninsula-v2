@@ -296,7 +296,7 @@ struct MusicPanelView: View {
     
     private var audioOutputPopover: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Output Device")
+            Text(String(localized: "Output Device"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)

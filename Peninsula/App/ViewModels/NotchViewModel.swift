@@ -6,8 +6,11 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var state: NotchState = .closed
     @Published private(set) var currentGeometry: NotchGeometry = .zero
     @Published private(set) var displayGeometry: NotchGeometry = .zero
+    @Published var shouldShowProgressRing: Bool = false
     
     let musicService = MusicService()
+    let weatherService = WeatherService()
+    let calendarService = CalendarService()
     
     private let screenService: ScreenIntelligenceService
     private var hoverService: HoverTrackingService?
@@ -65,6 +68,61 @@ final class NotchViewModel: ObservableObject {
         self.screenService = screenService
         updateGeometry()
         setupHoverTracking()
+        setupMusicServiceObserver()
+        initializeDashboardServices()
+        
+        // Delayed initial state check - MusicService needs time to detect playing music
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.refreshMusicState()
+            self?.objectWillChange.send()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.refreshMusicState()
+            self?.objectWillChange.send()
+        }
+    }
+    
+    /// Initialize dashboard services and request permissions
+    private func initializeDashboardServices() {
+        PermissionManager.shared.initializeDashboardServices(
+            weatherService: weatherService,
+            calendarService: calendarService
+        )
+    }
+    
+    /// Setup observer for MusicService state changes
+    private func setupMusicServiceObserver() {
+        // Forward ALL MusicService changes to the ViewModel
+        // This ensures that when 'duration' or 'currentPosition' changes (timer tick),
+        // the View (which observes ViewModel) gets a redraw signal.
+        musicService.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        
+        // Observe activeApp changes to update notch state
+        musicService.$activeApp
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                // Wait for the property to actually update (Published fires on willSet)
+                DispatchQueue.main.async {
+                     self?.refreshMusicState()
+                }
+            }
+            .store(in: &cancellables)
+        
+        // Observe isPlaying changes for equalizer animation and progress ring
+        musicService.$isPlaying
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                // Wait for the property to actually update
+                DispatchQueue.main.async {
+                    self?.refreshMusicState()
+                }
+            }
+            .store(in: &cancellables)
     }
     
     func updateGeometry() {
@@ -144,9 +202,24 @@ final class NotchViewModel: ObservableObject {
             newState = .closed
         }
         
-        guard newState != state else { return }
-        state = newState
-        updateDisplayGeometry()
+        let previousState = state
+        
+        // Update state logic
+        if newState != state {
+            state = newState
+            updateDisplayGeometry()
+        }
+        
+        // Notify of potential ring visibility change
+        if previousState != newState || newState == .playing {
+            objectWillChange.send()
+        }
+    }
+    
+    // Simplified visibility logic - purely derived from state
+    var showProgressRing: Bool {
+        // Show ring if we are in playing state AND music is actually playing
+        return state == .playing && musicService.isPlaying
     }
     
     func refreshMusicState() {

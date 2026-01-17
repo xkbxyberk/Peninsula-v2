@@ -1,0 +1,27 @@
+/* 
+  Localizable.strings (English)
+  Peninsula
+  
+  Primary language: English
+*/
+
+/* Dashboard - General */
+"Today" = "Today";
+"No events" = "No events";
+"event" = "event";
+"events" = "events";
+"No access" = "No access";
+
+/* Weather */
+"Loading..." = "Loading...";
+"Unknown" = "Unknown";
+"Location Denied" = "Location Denied";
+
+/* Music Panel */
+"Not Playing" = "Not Playing";
+"Open Apple Music or Spotify" = "Open Apple Music or Spotify";
+"Output Device" = "Output Device";
+
+/* Permissions */
+"Calendar Access Required" = "Calendar Access Required";
+"Location Access Required" = "Location Access Required";

@@ -14,5 +14,15 @@
         <string>com.spotify.client</string>
         <string>com.apple.systemevents</string>
     </array>
+    <!-- WeatherKit Access -->
+    <key>com.apple.developer.weatherkit</key>
+    <true/>
+    <!-- Calendar/Events Access -->
+    <key>com.apple.security.personal-information.calendars</key>
+    <true/>
+    <!-- Location Access (for weather) -->
+    <key>com.apple.security.personal-information.location</key>
+    <true/>
 </dict>
 </plist>
+

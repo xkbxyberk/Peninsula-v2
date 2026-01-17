@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Location Usage Description -->
+    <key>NSLocationUsageDescription</key>
+    <string>Peninsula uses your location to display local weather information in the dashboard.</string>
+    
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Peninsula uses your location to display local weather information in the dashboard.</string>
+    
+    <!-- Calendar Usage Description -->
+    <key>NSCalendarsUsageDescription</key>
+    <string>Peninsula displays your today's events in the dashboard panel.</string>
+    
+    <!-- Apple Events / Automation -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Peninsula needs access to control music applications like Apple Music and Spotify.</string>
+</dict>
+</plist>

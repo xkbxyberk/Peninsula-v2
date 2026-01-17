@@ -37,3 +37,13 @@ enum Colors {
     static let notchBackground = (r: 0.0, g: 0.0, b: 0.0, a: 1.0)
     static let contentBackground = (r: 0.1, g: 0.1, b: 0.1, a: 0.95)
 }
+
+/// Dashboard panel constants
+enum Dashboard {
+    /// Widget layout constants
+    enum Widget {
+        static let spacing: CGFloat = 16
+        static let padding: CGFloat = 24
+    }
+}
+

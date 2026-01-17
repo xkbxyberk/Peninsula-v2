@@ -32,9 +32,15 @@ final class MusicService: ObservableObject {
     private var artworkLoadWorkItem: DispatchWorkItem?
     private var positionTimer: Timer?
     
+    // Safety mechanism: block all interaction with apps that have recently signaled termination
+    private var terminatedApps: Set<String> = []
+    
     init() {
         setupNotificationObservers()
-        updateNowPlaying()
+        // Delay initial state check slightly to allow system to stabilize
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.updateNowPlaying()
+        }
     }
     
     deinit {
@@ -108,6 +114,9 @@ final class MusicService: ObservableObject {
               let bundleId = app.bundleIdentifier else { return }
         
         if bundleId == MusicApp.appleMusic.rawValue || bundleId == MusicApp.spotify.rawValue {
+            // Unblock app if it was previously terminated
+            terminatedApps.remove(bundleId)
+            
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 self?.updateNowPlaying()
             }
@@ -118,10 +127,17 @@ final class MusicService: ObservableObject {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
               let bundleId = app.bundleIdentifier else { return }
         
-        if bundleId == activeApp?.rawValue {
+        // Check if the terminated app is a music app we're tracking
+        if bundleId == MusicApp.appleMusic.rawValue || bundleId == MusicApp.spotify.rawValue {
+            // Block further interaction immediately
+            terminatedApps.insert(bundleId)
+            
             DispatchQueue.main.async { [weak self] in
-                self?.clearState()
-                self?.updateNowPlaying()
+                guard let self = self else { return }
+                // Only clear state if this was the active app
+                if bundleId == self.activeApp?.rawValue {
+                    self.clearState()
+                }
             }
         }
     }
@@ -162,7 +178,28 @@ final class MusicService: ObservableObject {
         let newTrack = userInfo["Name"] as? String ?? ""
         let newArtist = userInfo["Artist"] as? String ?? ""
         let newAlbum = userInfo["Album"] as? String ?? ""
-        let newDuration = userInfo["Total Time"] as? Double ?? 0
+        
+        // Safer casting for Total Time (handles Int/Double/NSNumber)
+        let totalTimeAny = userInfo["Total Time"]
+        let newDuration: Double
+        if let doubleVal = totalTimeAny as? Double {
+            newDuration = doubleVal
+        } else if let intVal = totalTimeAny as? Int {
+            newDuration = Double(intVal)
+        } else if let numberVal = totalTimeAny as? NSNumber {
+            newDuration = numberVal.doubleValue
+        } else {
+            newDuration = 0
+        }
+        
+        // Fallback: If we claim to be playing but have no duration or track name, 
+        // the notification is likely incomplete. Fetch full state via AppleScript.
+        if newIsPlaying && (newDuration == 0 || newTrack.isEmpty) {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.fetchAppleMusicState()
+            }
+            return
+        }
         
         let newIdentifier = "\(newTrack)|\(newArtist)|\(newAlbum)"
         let trackChanged = currentTrackIdentifier != newIdentifier
@@ -174,6 +211,8 @@ final class MusicService: ObservableObject {
             self.trackName = newTrack
             self.artistName = newArtist
             self.albumName = newAlbum
+            
+            // Total Time is in milliseconds, same as Spotify's code assumption
             self.duration = newDuration / 1000.0
             
             if trackChanged {
@@ -290,6 +329,9 @@ final class MusicService: ObservableObject {
     }
     
     private func fetchSpotifyArtwork() {
+        // Guard: Don't run AppleScript if app is not running
+        guard isAppRunning(.spotify) else { return }
+        
         let requestId = currentArtworkRequestId
         
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -375,19 +417,24 @@ final class MusicService: ObservableObject {
     private func updateShuffleState() {
         guard let app = activeApp else { return }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
             var isShuffled = false
             switch app {
             case .appleMusic:
-                if let result = self?.executeAppleScript("tell application \"Music\" to return shuffle enabled") {
+                // Guard: Don't run AppleScript if app is not running
+                guard self.isAppRunning(.appleMusic) else { return }
+                if let result = self.executeAppleScript("tell application \"Music\" to return shuffle enabled") {
                     isShuffled = result == "true"
                 }
             case .spotify:
-                if let result = self?.executeAppleScript("tell application \"Spotify\" to return shuffling") {
+                // Guard: Don't run AppleScript if app is not running
+                guard self.isAppRunning(.spotify) else { return }
+                if let result = self.executeAppleScript("tell application \"Spotify\" to return shuffling") {
                     isShuffled = result == "true"
                 }
             }
             DispatchQueue.main.async {
-                self?.shuffleEnabled = isShuffled
+                self.shuffleEnabled = isShuffled
             }
         }
     }
@@ -430,10 +477,16 @@ final class MusicService: ObservableObject {
     }
     
     private func isAppRunning(_ app: MusicApp) -> Bool {
-        NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == app.rawValue }
+        // First check if we've explicitly marked this app as terminated/terminating
+        if terminatedApps.contains(app.rawValue) { return false }
+        
+        return NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == app.rawValue }
     }
     
     private func getAppleMusicTrackInfo() -> (isPlaying: Bool, track: String, artist: String, album: String)? {
+        // Guard: Don't run AppleScript if app is not running - this prevents auto-launching
+        guard isAppRunning(.appleMusic) else { return nil }
+        
         let script = """
         tell application "Music"
             if player state is playing then
@@ -466,6 +519,9 @@ final class MusicService: ObservableObject {
     }
     
     private func getAppleMusicPosition() -> (position: Double, duration: Double) {
+        // Guard: Don't run AppleScript if app is not running
+        guard isAppRunning(.appleMusic) else { return (0, 0) }
+        
         let posScript = "tell application \"Music\" to return player position"
         let durScript = "tell application \"Music\" to return duration of current track"
         
@@ -479,6 +535,9 @@ final class MusicService: ObservableObject {
     }
     
     private func getSpotifyTrackInfo() -> (isPlaying: Bool, track: String, artist: String, album: String, artworkURL: String?)? {
+        // Guard: Don't run AppleScript if app is not running - this prevents auto-launching
+        guard isAppRunning(.spotify) else { return nil }
+        
         let script = """
         tell application "Spotify"
             if player state is playing then
@@ -513,6 +572,9 @@ final class MusicService: ObservableObject {
     }
     
     private func getSpotifyPosition() -> (position: Double, duration: Double) {
+        // Guard: Don't run AppleScript if app is not running
+        guard isAppRunning(.spotify) else { return (0, 0) }
+        
         let posScript = "tell application \"Spotify\" to return player position"
         let durScript = "tell application \"Spotify\" to return (duration of current track) / 1000"
         
@@ -531,6 +593,9 @@ final class MusicService: ObservableObject {
     }
     
     private func loadAppleMusicArtwork() {
+        // Guard: Don't run AppleScript if app is not running
+        guard isAppRunning(.appleMusic) else { return }
+        
         let artist = self.artistName
         let album = self.albumName
         let requestId = currentArtworkRequestId

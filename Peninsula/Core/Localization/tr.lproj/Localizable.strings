@@ -1,0 +1,27 @@
+/* 
+  Localizable.strings (Turkish)
+  Peninsula
+  
+  Secondary language: Turkish
+*/
+
+/* Dashboard - General */
+"Today" = "Bugün";
+"No events" = "Etkinlik yok";
+"event" = "etkinlik";
+"events" = "etkinlik";
+"No access" = "Erişim yok";
+
+/* Weather */
+"Loading..." = "Yükleniyor...";
+"Unknown" = "Bilinmiyor";
+"Location Denied" = "Konum Reddedildi";
+
+/* Music Panel */
+"Not Playing" = "Kapalı";
+"Open Apple Music or Spotify" = "Apple Music veya Spotify'ı açın";
+"Output Device" = "Çıkış Cihazı";
+
+/* Permissions */
+"Calendar Access Required" = "Takvim Erişimi Gerekli";
+"Location Access Required" = "Konum Erişimi Gerekli";
