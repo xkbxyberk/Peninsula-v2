@@ -222,6 +222,17 @@ final class NotchViewModel: ObservableObject {
                 activePanel = .music
             }
             
+            // Trigger weather fetch when Dashboard becomes visible
+            // This is the primary trigger for weather updates (cost optimization)
+            if newState == .expanded {
+                // Weather fetch is needed when:
+                // 1. Panel expands to show dashboard (no music playing)
+                // 2. User switches to dashboard panel while music is playing
+                if !isMusicActive || activePanel == .dashboard {
+                    weatherService.fetchIfNeeded()
+                }
+            }
+            
             // Track collapse animation: Expanded → Playing
             // Progress ring should wait until animation completes
             if previousState == .expanded && newState == .playing {
@@ -294,11 +305,22 @@ final class NotchViewModel: ObservableObject {
     func switchToPanel(_ panel: ActivePanel) {
         guard state.isExpanded, isMusicActive else { return }
         activePanel = panel
+        
+        // Trigger weather fetch when switching to dashboard
+        if panel == .dashboard {
+            weatherService.fetchIfNeeded()
+        }
     }
     
     /// Toggle between music and dashboard panels
     func togglePanel() {
         guard state.isExpanded, isMusicActive else { return }
-        activePanel = (activePanel == .music) ? .dashboard : .music
+        let newPanel: ActivePanel = (activePanel == .music) ? .dashboard : .music
+        activePanel = newPanel
+        
+        // Trigger weather fetch when switching to dashboard
+        if newPanel == .dashboard {
+            weatherService.fetchIfNeeded()
+        }
     }
 }
