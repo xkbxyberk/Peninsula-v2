@@ -1,8 +1,10 @@
 import SwiftUI
 import Combine
+import AppKit
 
 struct NotchPanelView: View {
     @ObservedObject var viewModel: NotchViewModel
+    @State private var scrollMonitor: Any?
     
     private var animationTiming: Animation {
         .timingCurve(
@@ -85,16 +87,63 @@ struct NotchPanelView: View {
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
         .animation(animationTiming, value: viewModel.state)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.activePanel)
         .animation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0.1), value: viewModel.showProgressRing)
+        // Smooth animation for Idle ↔ Playing transitions (baseWidth changes)
+        .animation(.spring(response: 0.5, dampingFraction: 0.75, blendDuration: 0.1), value: viewModel.isMusicActive)
         .onChange(of: viewModel.musicService.activeApp) { _ in
-            // Trigger state refresh when music app changes
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0.1)) {
+            // Trigger state refresh when music app changes with smooth animation
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.75, blendDuration: 0.1)) {
                 viewModel.refreshMusicState()
             }
         }
         .onAppear {
             // Request initial state check in case music is already playing
             viewModel.refreshMusicState()
+            setupScrollMonitor()
+        }
+        .onDisappear {
+            removeScrollMonitor()
+        }
+    }
+    
+    // MARK: - Two-finger scroll gesture handling
+    
+    private func setupScrollMonitor() {
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [self] event in
+            handleScrollEvent(event)
+            return event
+        }
+    }
+    
+    private func removeScrollMonitor() {
+        if let monitor = scrollMonitor {
+            NSEvent.removeMonitor(monitor)
+            scrollMonitor = nil
+        }
+    }
+    
+    private func handleScrollEvent(_ event: NSEvent) {
+        // Only respond when expanded and music is active
+        guard viewModel.state.isExpanded, viewModel.isMusicActive else { return }
+        
+        // Detect two-finger swipe (trackpad generates scrollWheel events)
+        // scrollingDeltaX is the horizontal scroll amount
+        let horizontalDelta = event.scrollingDeltaX
+        
+        // Threshold to prevent accidental triggers
+        let threshold: CGFloat = 20
+        
+        if abs(horizontalDelta) > threshold {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                if horizontalDelta > threshold {
+                    // Scroll right (fingers move right) -> Dashboard
+                    viewModel.switchToPanel(.dashboard)
+                } else if horizontalDelta < -threshold {
+                    // Scroll left (fingers move left) -> Music
+                    viewModel.switchToPanel(.music)
+                }
+            }
         }
     }
     
@@ -132,17 +181,36 @@ struct NotchPanelView: View {
     
     @ViewBuilder
     private var expandedContent: some View {
-        if viewModel.isMusicActive {
-            MusicPanelView(musicService: viewModel.musicService)
+        ZStack {
+            if viewModel.isMusicActive {
+                // Music is active - show switchable panels
+                if viewModel.activePanel == .music {
+                    MusicPanelView(musicService: viewModel.musicService)
+                        .padding(.top, 50)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
+                } else {
+                    DashboardPanelView(
+                        weatherService: viewModel.weatherService,
+                        calendarService: viewModel.calendarService
+                    )
+                    .padding(.top, 50)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                    ))
+                }
+            } else {
+                // No music active - show dashboard only
+                DashboardPanelView(
+                    weatherService: viewModel.weatherService,
+                    calendarService: viewModel.calendarService
+                )
                 .padding(.top, 50)
                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
-        } else {
-            DashboardPanelView(
-                weatherService: viewModel.weatherService,
-                calendarService: viewModel.calendarService
-            )
-            .padding(.top, 50)
-            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
         }
     }
 }

@@ -2,11 +2,18 @@ import Foundation
 import CoreGraphics
 import Combine
 
+/// Represents which panel is currently active when expanded
+enum ActivePanel: Equatable {
+    case music
+    case dashboard
+}
+
 final class NotchViewModel: ObservableObject {
     @Published private(set) var state: NotchState = .closed
     @Published private(set) var currentGeometry: NotchGeometry = .zero
     @Published private(set) var displayGeometry: NotchGeometry = .zero
     @Published var shouldShowProgressRing: Bool = false
+    @Published private(set) var activePanel: ActivePanel = .music
     
     let musicService = MusicService()
     let weatherService = WeatherService()
@@ -208,6 +215,11 @@ final class NotchViewModel: ObservableObject {
         if newState != state {
             state = newState
             updateDisplayGeometry()
+            
+            // Reset activePanel to music when leaving expanded state
+            if previousState == .expanded && newState != .expanded {
+                activePanel = .music
+            }
         }
         
         // Notify of potential ring visibility change
@@ -244,5 +256,19 @@ final class NotchViewModel: ObservableObject {
     func collapse() {
         isHovering = false
         updateState()
+    }
+    
+    // MARK: - Panel Switching
+    
+    /// Switch to a specific panel (only works when expanded and music is active)
+    func switchToPanel(_ panel: ActivePanel) {
+        guard state.isExpanded, isMusicActive else { return }
+        activePanel = panel
+    }
+    
+    /// Toggle between music and dashboard panels
+    func togglePanel() {
+        guard state.isExpanded, isMusicActive else { return }
+        activePanel = (activePanel == .music) ? .dashboard : .music
     }
 }
