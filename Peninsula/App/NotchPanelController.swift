@@ -16,9 +16,14 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
             return super.hitTest(point)
         }
         
-        // macOS view koordinatları: (0,0) sol-alt köşe
+        // macOS AppKit koordinatları: (0,0) sol-alt köşe
+        // SwiftUI/Path koordinatları: (0,0) sol-üst köşe
+        // Bu yüzden y koordinatını çevirmemiz gerekiyor
+        let flippedY = bounds.height - point.y
+        let flippedPoint = CGPoint(x: point.x, y: flippedY)
+        
         // Path'in noktayı içerip içermediğini kontrol et
-        if path.contains(point) {
+        if path.contains(flippedPoint) {
             return super.hitTest(point)
         }
         
