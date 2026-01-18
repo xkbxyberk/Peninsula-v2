@@ -135,9 +135,19 @@ final class NotchPanelController {
     
     private func updateMouseEventHandling(for state: NotchState) {
         guard let panel = panel else { return }
-        // Panel artık her zaman mouse event'lerini kabul ediyor
-        // Click-through davranışı NotchHostingView.hitTest() tarafından yönetiliyor
-        panel.ignoresMouseEvents = false
+        
+        // CRITICAL: Panel sadece expanded durumda mouse event'lerini kabul etmeli
+        // Closed ve playing durumlarında mouse event'leri ignore edilmeli
+        // böylece arkadaki pencerelere tıklama geçer
+        // Hover detection zaten HoverTrackingService tarafından global event monitor ile yapılıyor
+        switch state {
+        case .expanded:
+            // Expanded durumda panel içeriğiyle etkileşim gerekli
+            panel.ignoresMouseEvents = false
+        case .closed, .playing:
+            // Kapalı veya mini player durumunda click-through sağla
+            panel.ignoresMouseEvents = true
+        }
     }
     
     private func calculateFixedPanelFrame(geometry: NotchGeometry) -> NSRect {

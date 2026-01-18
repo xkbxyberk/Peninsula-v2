@@ -85,6 +85,17 @@ struct NotchPanelView: View {
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            // CRITICAL: Limit hit-test area to only the notch shape
+            // This allows clicks outside the notch to pass through to underlying windows
+            .contentShape(
+                NotchShape(
+                    progress: viewModel.expansionProgress,
+                    closedWidth: closedWidth,
+                    closedHeight: closedHeight,
+                    openWidth: Notch.Expanded.width,
+                    openHeight: Notch.Expanded.height
+                )
+            )
         }
         .animation(animationTiming, value: viewModel.state)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.activePanel)
