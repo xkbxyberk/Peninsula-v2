@@ -194,26 +194,39 @@ struct NotchPanelView: View {
     
     @ViewBuilder
     private var expandedContent: some View {
+        // Use clipping to ensure content stays within notch bounds during transitions
         ZStack {
             if viewModel.isMusicActive {
                 // Music is active - show switchable panels
                 if viewModel.activePanel == .music {
                     MusicPanelView(musicService: viewModel.musicService)
                         .padding(.top, 50)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .move(edge: .leading).combined(with: .opacity)
-                        ))
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity
+                                    .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                                    .combined(with: .offset(x: 30)),
+                                removal: .opacity
+                                    .combined(with: .scale(scale: 0.92, anchor: .leading))
+                                    .combined(with: .offset(x: -30))
+                            )
+                        )
                 } else {
                     DashboardPanelView(
                         weatherService: viewModel.weatherService,
                         calendarService: viewModel.calendarService
                     )
                     .padding(.top, 50)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .leading).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
-                    ))
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity
+                                .combined(with: .scale(scale: 0.92, anchor: .leading))
+                                .combined(with: .offset(x: -30)),
+                            removal: .opacity
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                                .combined(with: .offset(x: 30))
+                        )
+                    )
                 }
             } else {
                 // No music active - show dashboard only
@@ -225,6 +238,16 @@ struct NotchPanelView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
         }
+        // Clip content to notch shape during transitions
+        .clipShape(
+            NotchShape(
+                progress: viewModel.expansionProgress,
+                closedWidth: closedWidth,
+                closedHeight: closedHeight,
+                openWidth: Notch.Expanded.width,
+                openHeight: Notch.Expanded.height
+            )
+        )
     }
 }
 
