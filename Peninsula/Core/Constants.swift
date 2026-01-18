@@ -28,7 +28,10 @@ enum Notch {
 }
 
 enum Panel {
-    static let level: Int = 25
+    // Window level must be above tooltips and popovers
+    // NSStatusWindowLevel = 25, NSPopUpMenuWindowLevel = 101, NSScreenSaverWindowLevel = 1000
+    // Using level above popup menus to ensure notch stays on top of tooltips
+    static let level: Int = 102  // Just above NSPopUpMenuWindowLevel
     static let shadowRadius: CGFloat = 20
     static let shadowOpacity: Float = 0.3
 }
