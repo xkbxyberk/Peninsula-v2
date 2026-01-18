@@ -14,6 +14,7 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var displayGeometry: NotchGeometry = .zero
     @Published var shouldShowProgressRing: Bool = false
     @Published private(set) var activePanel: ActivePanel = .music
+    @Published private(set) var isAnimatingCollapse: Bool = false
     
     let musicService = MusicService()
     let weatherService = WeatherService()
@@ -220,6 +221,33 @@ final class NotchViewModel: ObservableObject {
             if previousState == .expanded && newState != .expanded {
                 activePanel = .music
             }
+            
+            // Track collapse animation: Expanded → Playing
+            // Progress ring should wait until animation completes
+            if previousState == .expanded && newState == .playing {
+                isAnimatingCollapse = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + Notch.animationDuration) { [weak self] in
+                    self?.isAnimatingCollapse = false
+                }
+            }
+            
+            // Track expand animation: Playing → Expanded
+            // Progress ring should hide immediately when expand starts
+            if previousState == .playing && newState == .expanded {
+                isAnimatingCollapse = true  // Reuse same flag to hide ring
+                DispatchQueue.main.asyncAfter(deadline: .now() + Notch.animationDuration) { [weak self] in
+                    self?.isAnimatingCollapse = false
+                }
+            }
+            
+            // Track initial expansion: Closed → Playing (app launch with music playing)
+            // Progress ring should wait until notch fully expands to mini player size
+            if previousState == .closed && newState == .playing {
+                isAnimatingCollapse = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + Notch.animationDuration) { [weak self] in
+                    self?.isAnimatingCollapse = false
+                }
+            }
         }
         
         // Notify of potential ring visibility change
@@ -230,6 +258,8 @@ final class NotchViewModel: ObservableObject {
     
     // Simplified visibility logic - purely derived from state
     var showProgressRing: Bool {
+        // Don't show ring while any panel animation is in progress
+        guard !isAnimatingCollapse else { return false }
         // Show ring if we are in playing state AND music is actually playing
         return state == .playing && musicService.isPlaying
     }

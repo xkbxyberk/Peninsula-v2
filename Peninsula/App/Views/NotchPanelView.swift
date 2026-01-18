@@ -70,8 +70,10 @@ struct NotchPanelView: View {
                 )
                 .shadow(color: accentColor.opacity(0.5), radius: 4)
                 .animation(.linear(duration: 1.0), value: progressValue)
+                // Opacity controlled by showProgressRing
+                // Use nil animation when hiding (instant), easeIn when showing
                 .opacity(viewModel.showProgressRing ? 1 : 0)
-                .animation(.easeIn(duration: 0.25), value: viewModel.showProgressRing)
+                .animation(viewModel.showProgressRing ? .easeIn(duration: 0.25) : .linear(duration: 0), value: viewModel.showProgressRing)
                 
                 if viewModel.state.isPlaying {
                     miniPlayerContent
